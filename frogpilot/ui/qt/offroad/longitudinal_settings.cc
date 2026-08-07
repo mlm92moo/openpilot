@@ -103,6 +103,7 @@ FrogPilotLongitudinalPanel::FrogPilotLongitudinalPanel(FrogPilotSettingsWindow *
     {"CalibrationProgress", tr("Calibration Progress"), tr("<b>How much curve data has been collected.</b> This is a progress meter; it is normal for the value to stay low and rarely reach 100%."), ""},
     {"ResetCurveData", tr("Reset Curve Data"), tr("<b>Reset collected user data for \"Curve Speed Controller\".</b>"), ""},
     {"ShowCSCStatus", tr("Status Widget"), tr("<b>Show the \"Curve Speed Controller\" target speed on the driving screen.</b>"), ""},
+    {"PersonalSpeedZoneTarget", tr("Recorded Zone Target Speed"), tr("<b>The target speed saved with newly recorded zones.</b> The driving-screen recorder button is always available while on-road."), ""},
 
     {"CustomPersonalities", tr("Driving Personalities"), tr("<b>Customize the \"Driving Personalities\"</b> to better match your driving style."), "../../frogpilot/assets/toggle_icons/icon_personality.png"},
 
@@ -295,6 +296,9 @@ FrogPilotLongitudinalPanel::FrogPilotLongitudinalPanel(FrogPilotSettingsWindow *
         }
       });
       longitudinalToggle = resetCurveDataButton;
+
+    } else if (param == "PersonalSpeedZoneTarget") {
+      longitudinalToggle = new FrogPilotParamValueControl(param, title, desc, icon, 12, 90, tr(" mph"));
 
     } else if (param == "CustomPersonalities") {
       FrogPilotManageControl *customPersonalitiesToggle = new FrogPilotManageControl(param, title, desc, icon);

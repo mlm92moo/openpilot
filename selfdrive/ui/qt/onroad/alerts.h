@@ -9,6 +9,7 @@ class OnroadAlerts : public QWidget {
 
 public:
   OnroadAlerts(QWidget *parent = 0) : QWidget(parent) {}
+  bool hasAlert() const { return alert.size != cereal::ControlsState::AlertSize::NONE; }
   void updateState(const UIState &s, const FrogPilotUIState &fs);
   void clear();
 

@@ -1,7 +1,10 @@
 #include "selfdrive/ui/qt/onroad/onroad_home.h"
 
+#include <cmath>
+#include <QApplication>
 #include <QPainter>
 #include <QStackedLayout>
+#include <QTimer>
 
 #ifdef ENABLE_MAPS
 #include "selfdrive/ui/qt/maps/map_helpers.h"
@@ -9,6 +12,8 @@
 #endif
 
 #include "selfdrive/ui/qt/util.h"
+
+#include "frogpilot/ui/qt/onroad/personal_speed_zone_config.h"
 
 OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   QVBoxLayout *main_layout  = new QVBoxLayout(this);
@@ -52,12 +57,29 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   // FrogPilot variables
   frogpilot_onroad = new FrogPilotOnroadWindow(this);
   frogpilot_onroad->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+
+  personal_speed_zone_button = new QPushButton(this);
+  personal_speed_zone_button->setFocusPolicy(Qt::NoFocus);
+  personal_speed_zone_button->setFixedSize(620, 160);
+  personal_speed_zone_button->setStyleSheet(
+    "QPushButton { background-color: rgba(23, 134, 68, 235); border: 8px solid white; "
+    "border-radius: 32px; color: white; font-size: 43px; font-weight: 700; padding: 8px; } "
+    "QPushButton:pressed { background-color: rgba(13, 94, 48, 245); }");
+  personal_speed_zone_button->setText(tr("MARK SLOWDOWN"));
+  personal_speed_zone_button->setVisible(false);
+  QObject::connect(personal_speed_zone_button, &QPushButton::pressed, [this] {
+    personal_speed_zone_press_timer.restart();
+  });
+  QObject::connect(personal_speed_zone_button, &QPushButton::released, this, &OnroadWindow::handlePersonalSpeedZoneRelease);
 }
 
 void OnroadWindow::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
 
   frogpilot_onroad->setGeometry(rect());
+  personal_speed_zone_button->move((width() - personal_speed_zone_button->width()) / 2,
+                                   height() - personal_speed_zone_button->height() - UI_BORDER_SIZE * 2);
+  personal_speed_zone_button->raise();
 }
 
 void OnroadWindow::updateState(const UIState &s, const FrogPilotUIState &fs) {
@@ -88,6 +110,97 @@ void OnroadWindow::updateState(const UIState &s, const FrogPilotUIState &fs) {
   nvg->frogpilot_nvg->alertHeight = alerts->alertHeight;
 
   frogpilot_onroad->updateState(s, fs);
+  updatePersonalSpeedZoneRecorder(s);
+}
+
+void OnroadWindow::updatePersonalSpeedZoneRecorder(const UIState &s) {
+  personal_speed_zone_position_valid = false;
+  const SubMaster &sm = *(s.sm);
+  if (sm.alive("liveLocationKalman")) {
+    const auto location = sm["liveLocationKalman"].getLiveLocationKalman();
+    const auto position = location.getPositionGeodetic();
+    const auto orientation = location.getCalibratedOrientationNED();
+    if (location.getGpsOK() && location.getStatus() == cereal::LiveLocationKalman::Status::VALID &&
+        position.getValid() && orientation.getValid() && position.getValue().size() >= 2 && orientation.getValue().size() >= 3) {
+      const double latitude = position.getValue()[0];
+      const double longitude = position.getValue()[1];
+      double bearing = std::fmod(orientation.getValue()[2] * 180.0 / M_PI + 360.0, 360.0);
+      if (std::isfinite(latitude) && std::isfinite(longitude) && std::isfinite(bearing) &&
+          latitude >= -90.0 && latitude <= 90.0 && longitude >= -180.0 && longitude <= 180.0) {
+        personal_speed_zone_position = {{"latitude", latitude}, {"longitude", longitude}, {"bearing", bearing}};
+        personal_speed_zone_position_valid = true;
+      }
+    }
+  }
+
+  personal_speed_zone_button->setVisible(!alerts->hasAlert());
+  if (!alerts->hasAlert()) personal_speed_zone_button->raise();
+}
+
+void OnroadWindow::showPersonalSpeedZoneMessage(const QString &message, const QString &color, int duration_ms) {
+  personal_speed_zone_message_visible = true;
+  personal_speed_zone_button->setText(message);
+  personal_speed_zone_button->setStyleSheet(QString(
+    "QPushButton { background-color: %1; border: 8px solid white; border-radius: 32px; "
+    "color: white; font-size: 43px; font-weight: 700; padding: 8px; }").arg(color));
+  QTimer::singleShot(duration_ms, this, [this] {
+    personal_speed_zone_message_visible = false;
+    personal_speed_zone_button->setStyleSheet(
+      "QPushButton { background-color: rgba(23, 134, 68, 235); border: 8px solid white; "
+      "border-radius: 32px; color: white; font-size: 43px; font-weight: 700; padding: 8px; } "
+      "QPushButton:pressed { background-color: rgba(13, 94, 48, 245); }");
+    personal_speed_zone_button->setText(personal_speed_zone_start.isEmpty() ? tr("MARK SLOWDOWN") : tr("MARK RESUME\nHOLD TO CANCEL"));
+    personal_speed_zone_button->setVisible(!alerts->hasAlert());
+  });
+}
+
+void OnroadWindow::handlePersonalSpeedZoneRelease() {
+  if (alerts->hasAlert() || !personal_speed_zone_button->isVisible() || personal_speed_zone_message_visible ||
+      (personal_speed_zone_tap_timer.isValid() && personal_speed_zone_tap_timer.elapsed() < 1000)) {
+    return;
+  }
+  personal_speed_zone_tap_timer.restart();
+
+  if (!personal_speed_zone_start.isEmpty() && personal_speed_zone_press_timer.isValid() && personal_speed_zone_press_timer.elapsed() >= 1500) {
+    personal_speed_zone_start = QJsonObject();
+    QApplication::beep();
+    showPersonalSpeedZoneMessage(tr("RECORDING CANCELED"), "rgba(218, 111, 37, 245)");
+    return;
+  }
+
+  if (!personal_speed_zone_position_valid) {
+    showPersonalSpeedZoneMessage(tr("GPS UNAVAILABLE"), "rgba(201, 34, 49, 245)");
+    return;
+  }
+
+  if (personal_speed_zone_start.isEmpty()) {
+    personal_speed_zone_start = personal_speed_zone_position;
+    QApplication::beep();
+    showPersonalSpeedZoneMessage(tr("START SAVED"), "rgba(23, 134, 68, 245)", 1200);
+    return;
+  }
+
+  constexpr double earth_radius_m = 6371000.0;
+  const double lat1 = personal_speed_zone_start["latitude"].toDouble() * M_PI / 180.0;
+  const double lat2 = personal_speed_zone_position["latitude"].toDouble() * M_PI / 180.0;
+  const double d_lat = lat2 - lat1;
+  const double d_lon = (personal_speed_zone_position["longitude"].toDouble() - personal_speed_zone_start["longitude"].toDouble()) * M_PI / 180.0;
+  const double a = std::sin(d_lat / 2.0) * std::sin(d_lat / 2.0) + std::cos(lat1) * std::cos(lat2) * std::sin(d_lon / 2.0) * std::sin(d_lon / 2.0);
+  const double distance = earth_radius_m * 2.0 * std::atan2(std::sqrt(a), std::sqrt(1.0 - a));
+  if (distance < 10.0) {
+    showPersonalSpeedZoneMessage(tr("DRIVE FARTHER"), "rgba(218, 111, 37, 245)");
+    return;
+  }
+
+  if (!appendPersonalSpeedZone("/data/personal_speed_zones.json", personal_speed_zone_start,
+                               personal_speed_zone_position, params.getInt("PersonalSpeedZoneTarget"))) {
+    showPersonalSpeedZoneMessage(tr("SAVE FAILED"), "rgba(201, 34, 49, 245)");
+    return;
+  }
+
+  personal_speed_zone_start = QJsonObject();
+  QApplication::beep();
+  showPersonalSpeedZoneMessage(tr("ZONE SAVED - ACTIVE"), "rgba(49, 161, 238, 245)", 3000);
 }
 
 void OnroadWindow::mousePressEvent(QMouseEvent* e) {
@@ -169,6 +282,10 @@ void OnroadWindow::offroadTransition(bool offroad) {
     alerts->enableFerg = util::random_int(0, 1) == 1;
   } else {
     alerts->displayFerg = false;
+    personal_speed_zone_start = QJsonObject();
+    personal_speed_zone_message_visible = false;
+    personal_speed_zone_button->setText(tr("MARK SLOWDOWN"));
+    personal_speed_zone_button->setVisible(false);
   }
 }
 

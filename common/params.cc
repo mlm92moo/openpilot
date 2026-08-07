@@ -439,6 +439,7 @@ std::unordered_map<std::string, uint32_t> keys = {
     {"OneLaneChange", PERSISTENT},
     {"OnroadDistanceButton", PERSISTENT},
     {"OnroadDistanceButtonPressed", CLEAR_ON_MANAGER_START},
+    {"PersonalSpeedZoneTarget", PERSISTENT},
     {"openpilotMinutes", PERSISTENT},
     {"OSMDownloadBounds", PERSISTENT},
     {"OSMDownloadLocations", PERSISTENT},
