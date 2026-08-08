@@ -1,0 +1,23 @@
+{
+  "apply_target": false,
+  "zones": [
+    {
+      "id": "example-northbound-curve",
+      "enabled": true,
+      "target_mph": 60,
+      "start": {
+        "latitude": 37.421900,
+        "longitude": -122.084100,
+        "bearing": 2.0
+      },
+      "end": {
+        "latitude": 37.425000,
+        "longitude": -122.083900,
+        "bearing": 2.0
+      },
+      "corridor_width_m": 18.0,
+      "gate_arm_distance_m": 12.0,
+      "heading_tolerance_deg": 20.0
+    }
+  ]
+}

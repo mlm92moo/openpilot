@@ -169,6 +169,10 @@ class FrogPilotPlanner:
 
     frogpilotPlan.roadCurvature = self.road_curvature
 
+    frogpilotPlan.personalSpeedZoneActive = self.frogpilot_vcruise.psc.applied_target is not None
+    frogpilotPlan.personalSpeedZoneTarget = self.frogpilot_vcruise.psc.applied_target or 0
+    frogpilotPlan.personalSpeedZoneCount = min(len(self.frogpilot_vcruise.psc.zones), 65535)
+
     frogpilotPlan.slcMapSpeedLimit = self.frogpilot_vcruise.slc.map_speed_limit
     frogpilotPlan.slcMapboxSpeedLimit = self.frogpilot_vcruise.slc.mapbox_limit
     frogpilotPlan.slcNextSpeedLimit = self.frogpilot_vcruise.slc.next_speed_limit

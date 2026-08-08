@@ -1,4 +1,5 @@
 #include "frogpilot/ui/qt/offroad/longitudinal_settings.h"
+#include "frogpilot/ui/qt/onroad/personal_speed_zone_config.h"
 
 FrogPilotLongitudinalPanel::FrogPilotLongitudinalPanel(FrogPilotSettingsWindow *parent) : FrogPilotListWidget(parent), parent(parent) {
   networkManager = new QNetworkAccessManager(this);
@@ -27,6 +28,7 @@ FrogPilotLongitudinalPanel::FrogPilotLongitudinalPanel(FrogPilotSettingsWindow *
   FrogPilotListWidget *curveSpeedList = new FrogPilotListWidget(this);
   FrogPilotListWidget *customDrivingPersonalityList = new FrogPilotListWidget(this);
   FrogPilotListWidget *longitudinalTuneList = new FrogPilotListWidget(this);
+  FrogPilotListWidget *personalSpeedZoneList = new FrogPilotListWidget(this);
   FrogPilotListWidget *qolList = new FrogPilotListWidget(this);
   FrogPilotListWidget *relaxedPersonalityList = new FrogPilotListWidget(this);
   FrogPilotListWidget *speedLimitControllerList = new FrogPilotListWidget(this);
@@ -46,6 +48,7 @@ FrogPilotLongitudinalPanel::FrogPilotLongitudinalPanel(FrogPilotSettingsWindow *
   ScrollView *curveSpeedPanel = new ScrollView(curveSpeedList, this);
   ScrollView *customDrivingPersonalityPanel = new ScrollView(customDrivingPersonalityList, this);
   ScrollView *longitudinalTunePanel = new ScrollView(longitudinalTuneList, this);
+  ScrollView *personalSpeedZonePanel = new ScrollView(personalSpeedZoneList, this);
   ScrollView *qolPanel = new ScrollView(qolList, this);
   ScrollView *relaxedPersonalityPanel = new ScrollView(relaxedPersonalityList, this);
   ScrollView *speedLimitControllerPanel = new ScrollView(speedLimitControllerList, this);
@@ -65,6 +68,7 @@ FrogPilotLongitudinalPanel::FrogPilotLongitudinalPanel(FrogPilotSettingsWindow *
   longitudinalLayout->addWidget(curveSpeedPanel);
   longitudinalLayout->addWidget(customDrivingPersonalityPanel);
   longitudinalLayout->addWidget(longitudinalTunePanel);
+  longitudinalLayout->addWidget(personalSpeedZonePanel);
   longitudinalLayout->addWidget(qolPanel);
   longitudinalLayout->addWidget(relaxedPersonalityPanel);
   longitudinalLayout->addWidget(speedLimitControllerPanel);
@@ -103,6 +107,11 @@ FrogPilotLongitudinalPanel::FrogPilotLongitudinalPanel(FrogPilotSettingsWindow *
     {"CalibrationProgress", tr("Calibration Progress"), tr("<b>How much curve data has been collected.</b> This is a progress meter; it is normal for the value to stay low and rarely reach 100%."), ""},
     {"ResetCurveData", tr("Reset Curve Data"), tr("<b>Reset collected user data for \"Curve Speed Controller\".</b>"), ""},
     {"ShowCSCStatus", tr("Status Widget"), tr("<b>Show the \"Curve Speed Controller\" target speed on the driving screen.</b>"), ""},
+
+    {"PersonalSpeedZoneButton", tr("Mark Slowdown Button"), tr("<b>Show the button used to record personal slowdown zones on the driving screen.</b> Hiding the button does not disable zones you already saved."), "../../frogpilot/assets/toggle_icons/icon_speed_map.png"},
+    {"PersonalSpeedZoneTarget", tr("Marked Zone Speed"), tr("<b>The target speed saved with each new slowdown zone.</b> This setting is used unless \"Use Lowest Recorded Speed\" is enabled."), ""},
+    {"PersonalSpeedZoneUseCurrentSpeed", tr("Use Lowest Recorded Speed"), tr("<b>Use the lowest vehicle speed observed between \"MARK SLOWDOWN\" and \"MARK RESUME\" as that zone's target.</b> The saved speed is limited to 12-90 mph."), ""},
+    {"ErasePersonalSpeedZones", tr("Erase All Saved Zones"), tr("<b>Permanently erase every personal slowdown zone and its saved speed.</b>"), ""},
 
     {"CustomPersonalities", tr("Driving Personalities"), tr("<b>Customize the \"Driving Personalities\"</b> to better match your driving style."), "../../frogpilot/assets/toggle_icons/icon_personality.png"},
 
@@ -295,6 +304,29 @@ FrogPilotLongitudinalPanel::FrogPilotLongitudinalPanel(FrogPilotSettingsWindow *
         }
       });
       longitudinalToggle = resetCurveDataButton;
+
+    } else if (param == "PersonalSpeedZoneTarget") {
+      personalSpeedZoneTargetToggle = new FrogPilotParamValueControl(param, title, desc, icon, 12, 90, tr(" mph"));
+      longitudinalToggle = personalSpeedZoneTargetToggle;
+
+    } else if (param == "PersonalSpeedZoneButton") {
+      FrogPilotManageControl *personalSpeedZoneToggle = new FrogPilotManageControl(param, title, desc, icon);
+      QObject::connect(personalSpeedZoneToggle, &FrogPilotManageControl::manageButtonClicked, [longitudinalLayout, personalSpeedZonePanel]() {
+        longitudinalLayout->setCurrentWidget(personalSpeedZonePanel);
+      });
+      longitudinalToggle = personalSpeedZoneToggle;
+    } else if (param == "ErasePersonalSpeedZones") {
+      ButtonControl *erasePersonalSpeedZonesButton = new ButtonControl(title, tr("ERASE"), desc);
+      QObject::connect(erasePersonalSpeedZonesButton, &ButtonControl::clicked, [this]() {
+        if (!FrogPilotConfirmationDialog::yesorno(tr("Erase every saved personal slowdown zone and its speed?"), this)) return;
+
+        if (clearPersonalSpeedZones("/data/personal_speed_zones.json")) {
+          ConfirmationDialog::alert(tr("All personal slowdown zones were erased."), this);
+        } else {
+          ConfirmationDialog::alert(tr("The saved zones could not be erased. Please try again."), this);
+        }
+      });
+      longitudinalToggle = erasePersonalSpeedZonesButton;
 
     } else if (param == "CustomPersonalities") {
       FrogPilotManageControl *customPersonalitiesToggle = new FrogPilotManageControl(param, title, desc, icon);
@@ -636,6 +668,8 @@ FrogPilotLongitudinalPanel::FrogPilotLongitudinalPanel(FrogPilotSettingsWindow *
       customDrivingPersonalityList->addItem(longitudinalToggle);
     } else if (longitudinalTuneKeys.contains(param)) {
       longitudinalTuneList->addItem(longitudinalToggle);
+    } else if (personalSpeedZoneKeys.contains(param)) {
+      personalSpeedZoneList->addItem(longitudinalToggle);
     } else if (qolKeys.contains(param)) {
       qolList->addItem(longitudinalToggle);
     } else if (relaxedPersonalityKeys.contains(param)) {
@@ -849,6 +883,7 @@ void FrogPilotLongitudinalPanel::updateMetric(bool metric, bool bootRun) {
   static std::map<float, QString> imperialDistanceLabels;
   static std::map<float, QString> imperialSpeedLabels;
   static std::map<float, QString> metricDistanceLabels;
+  static std::map<float, QString> metricPersonalSpeedZoneLabels;
   static std::map<float, QString> metricSpeedLabels;
 
   static bool labelsInitialized = false;
@@ -867,6 +902,10 @@ void FrogPilotLongitudinalPanel::updateMetric(bool metric, bool bootRun) {
 
     for (int i = -150; i <= 150; ++i) {
       metricSpeedLabels[i] = i == 0 ? tr("Off") : QString::number(i) + tr(" km/h");
+    }
+
+    for (int i = 12; i <= 90; ++i) {
+      metricPersonalSpeedZoneLabels[i] = QString::number(std::lround(i * MILE_TO_KM)) + tr(" km/h");
     }
 
     labelsInitialized = true;
@@ -924,6 +963,7 @@ void FrogPilotLongitudinalPanel::updateMetric(bool metric, bool bootRun) {
     offset5Toggle->updateControl(-150, 150, metricSpeedLabels);
     offset6Toggle->updateControl(-150, 150, metricSpeedLabels);
     offset7Toggle->updateControl(-150, 150, metricSpeedLabels);
+    personalSpeedZoneTargetToggle->updateControl(12, 90, metricPersonalSpeedZoneLabels);
     setSpeedOffsetToggle->updateControl(-150, 150, metricSpeedLabels);
   } else {
     offset1Toggle->setTitle(tr("Speed Offset (0–24 mph)"));
@@ -959,6 +999,7 @@ void FrogPilotLongitudinalPanel::updateMetric(bool metric, bool bootRun) {
     offset5Toggle->updateControl(-99, 99, imperialSpeedLabels);
     offset6Toggle->updateControl(-99, 99, imperialSpeedLabels);
     offset7Toggle->updateControl(-99, 99, imperialSpeedLabels);
+    personalSpeedZoneTargetToggle->updateControl(12, 90);
     setSpeedOffsetToggle->updateControl(0, 99, imperialSpeedLabels);
   }
 }
@@ -1030,6 +1071,8 @@ void FrogPilotLongitudinalPanel::updateToggles() {
         toggles["CustomPersonalities"]->setVisible(true);
       } else if (longitudinalTuneKeys.contains(key)) {
         toggles["LongitudinalTune"]->setVisible(true);
+      } else if (personalSpeedZoneKeys.contains(key)) {
+        toggles["PersonalSpeedZoneButton"]->setVisible(true);
       } else if (qolKeys.contains(key)) {
         toggles["QOLLongitudinal"]->setVisible(true);
       } else if (relaxedPersonalityKeys.contains(key)) {

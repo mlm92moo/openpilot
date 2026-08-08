@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 from openpilot.common.conversions import Conversions as CV
 from openpilot.common.realtime import DT_MDL
-from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import COMFORT_BRAKE
+from openpilot.selfdrive.controls.lib.drive_helpers import V_CRUISE_MAX
 
 from openpilot.frogpilot.common.frogpilot_variables import CRUISING_SPEED, PLANNER_TIME
 from openpilot.frogpilot.controls.lib.curve_speed_controller import CurveSpeedController
+from openpilot.frogpilot.controls.lib.personal_speed_controller import PersonalSpeedController
 from openpilot.frogpilot.controls.lib.speed_limit_controller import SpeedLimitController
 
 class FrogPilotVCruise:
@@ -12,6 +13,7 @@ class FrogPilotVCruise:
     self.frogpilot_planner = FrogPilotPlanner
 
     self.csc = CurveSpeedController(self)
+    self.psc = PersonalSpeedController(min_target=CRUISING_SPEED, max_target=V_CRUISE_MAX * CV.KPH_TO_MS)
     self.slc = SpeedLimitController()
 
     self.forcing_stop = False
@@ -62,19 +64,27 @@ class FrogPilotVCruise:
     self.slc.frogpilot_toggles = frogpilot_toggles
 
     if frogpilot_toggles.speed_limit_controller:
-      self.slc.update_limits(sm["frogpilotCarState"].dashboardSpeedLimit, gps_position, sm["frogpilotNavigation"].navigationSpeedLimit, now, time_validated, v_cruise, v_ego, sm)
+      self.slc.update_limits(sm["frogpilotCarState"].dashboardSpeedLimit, gps_position, sm["frogpilotNavigation"].navigationSpeedLimit,
+                             now, time_validated, v_cruise, v_ego, sm)
       self.slc.update_override(v_cruise, v_cruise_diff, v_ego, v_ego_diff, sm)
 
       self.slc_offset = self.slc.offset
       self.slc_target = self.slc.target
     elif frogpilot_toggles.show_speed_limits:
-      self.slc.update_limits(sm["frogpilotCarState"].dashboardSpeedLimit, gps_position, sm["frogpilotNavigation"].navigationSpeedLimit, now, time_validated, v_cruise, v_ego, sm)
+      self.slc.update_limits(sm["frogpilotCarState"].dashboardSpeedLimit, gps_position, sm["frogpilotNavigation"].navigationSpeedLimit,
+                             now, time_validated, v_cruise, v_ego, sm)
 
       self.slc_offset = 0
       self.slc_target = self.slc.target
     else:
       self.slc_offset = 0
       self.slc_target = 0
+
+    # Personal Speed Zones only select another cruise target. The existing longitudinal MPC remains responsible for actuation.
+    controls_enabled = sm["controlsState"].enabled
+    openpilot_longitudinal = frogpilot_toggles.openpilot_longitudinal and sm["carControl"].longActive
+    self.psc.update(gps_position, now, controls_enabled, openpilot_longitudinal)
+    self.psc_target = self.psc.get_target(v_cruise, controls_enabled, openpilot_longitudinal)
 
     if force_stop_enabled and not self.override_force_stop:
       self.forcing_stop |= not sm["carState"].standstill
@@ -87,7 +97,7 @@ class FrogPilotVCruise:
 
       self.tracked_model_length = self.frogpilot_planner.model_length
 
-      targets = [self.csc_target, v_cruise]
+      targets = [self.csc_target, self.psc_target, v_cruise]
       if frogpilot_toggles.speed_limit_controller:
         targets.append(max(self.slc.overridden_speed, self.slc_target + self.slc_offset) - v_ego_diff)
 
