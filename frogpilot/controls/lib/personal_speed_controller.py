@@ -206,6 +206,13 @@ class PersonalSpeedController:
     try:
       mtime_ns = os.stat(self.config_path).st_mtime_ns
     except OSError:
+      if self._observed_mtime_ns is not None:
+        self._observed_mtime_ns = None
+        self.apply_target = False
+        self.zones = ()
+        self.active_zone_ids.clear()
+        self._update_target()
+        _log_event("personal_speed_zones_config_loaded", apply_target=False, zone_count=0)
       return
     if mtime_ns == self._observed_mtime_ns:
       return

@@ -1,6 +1,7 @@
 #include "frogpilot/ui/qt/onroad/personal_speed_zone_config.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <QDateTime>
 #include <QFile>
@@ -47,4 +48,25 @@ bool appendPersonalSpeedZone(const QString &config_path, const QJsonObject &star
 
   if (zone_id != nullptr) *zone_id = id;
   return true;
+}
+
+bool clearPersonalSpeedZones(const QString &config_path) {
+  const QJsonObject config {
+    {"apply_target", false},
+    {"zones", QJsonArray()},
+  };
+
+  QSaveFile output(config_path);
+  if (!output.open(QIODevice::WriteOnly)) return false;
+  if (output.write(QJsonDocument(config).toJson(QJsonDocument::Indented)) < 0) return false;
+  return output.commit();
+}
+
+int selectPersonalSpeedZoneTargetMph(int configured_target_mph, bool use_current_speed, double current_speed_mps) {
+  int target_mph = configured_target_mph;
+  if (use_current_speed && std::isfinite(current_speed_mps)) {
+    constexpr double meters_per_second_to_mph = 2.2369362921;
+    target_mph = std::lround(current_speed_mps * meters_per_second_to_mph);
+  }
+  return std::clamp(target_mph, 12, 90);
 }

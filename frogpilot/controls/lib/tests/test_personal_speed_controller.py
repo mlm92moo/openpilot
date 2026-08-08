@@ -103,6 +103,30 @@ def test_malformed_reload_retains_last_valid_configuration(configured_controller
   assert controller.target == pytest.approx(35 * CV.MPH_TO_MS)
 
 
+def test_removed_configuration_clears_saved_and_active_zones(configured_controller):
+  controller, config_path = configured_controller
+  activate(controller)
+  config_path.unlink()
+  update(controller, 2, position(25))
+  assert controller.zones == ()
+  assert not controller.active_zone_ids
+  assert controller.target is None
+  assert controller.applied_target is None
+
+
+def test_empty_configuration_clears_saved_and_active_zones(configured_controller):
+  controller, config_path = configured_controller
+  activate(controller)
+  previous_mtime = config_path.stat().st_mtime_ns
+  write_config(config_path, [], apply_target=False)
+  os.utime(config_path, ns=(previous_mtime + 1_000_000_000, previous_mtime + 1_000_000_000))
+  update(controller, 2, position(25))
+  assert controller.zones == ()
+  assert not controller.active_zone_ids
+  assert controller.target is None
+  assert controller.applied_target is None
+
+
 def test_temporary_gps_loss_retains_active_target(configured_controller):
   controller, _ = configured_controller
   activate(controller)

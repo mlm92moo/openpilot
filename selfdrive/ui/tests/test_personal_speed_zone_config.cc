@@ -68,3 +68,22 @@ TEST_CASE("Personal Speed Zones: malformed configuration is not overwritten") {
   REQUIRE(file.open(QIODevice::ReadOnly));
   CHECK(file.readAll() == malformed);
 }
+
+TEST_CASE("Personal Speed Zones: clearing zones writes an empty valid configuration") {
+  QTemporaryDir directory;
+  REQUIRE(directory.isValid());
+  const QString path = directory.filePath("zones.json");
+  REQUIRE(appendPersonalSpeedZone(path, marker(37.0, -122.0, 0.0), marker(37.1, -122.1, 0.0), 25));
+
+  REQUIRE(clearPersonalSpeedZones(path));
+  const QJsonObject config = readConfig(path);
+  CHECK_FALSE(config.value("apply_target").toBool());
+  CHECK(config.value("zones").toArray().isEmpty());
+}
+
+TEST_CASE("Personal Speed Zones: target can use the speed captured at the start marker") {
+  CHECK(selectPersonalSpeedZoneTargetMph(25, false, 13.4112) == 25);
+  CHECK(selectPersonalSpeedZoneTargetMph(25, true, 13.4112) == 30);
+  CHECK(selectPersonalSpeedZoneTargetMph(25, true, 0.0) == 12);
+  CHECK(selectPersonalSpeedZoneTargetMph(25, true, 100.0) == 90);
+}

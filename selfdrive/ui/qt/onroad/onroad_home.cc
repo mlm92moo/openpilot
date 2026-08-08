@@ -69,8 +69,17 @@ OnroadWindow::OnroadWindow(QWidget *parent) : QWidget(parent) {
   personal_speed_zone_button->setVisible(false);
   QObject::connect(personal_speed_zone_button, &QPushButton::pressed, [this] {
     personal_speed_zone_press_timer.restart();
+    personal_speed_zone_press_speed_mps = personal_speed_zone_current_speed_mps;
   });
   QObject::connect(personal_speed_zone_button, &QPushButton::released, this, &OnroadWindow::handlePersonalSpeedZoneRelease);
+
+  personal_speed_zone_status = new QLabel(this);
+  personal_speed_zone_status->setAlignment(Qt::AlignCenter);
+  personal_speed_zone_status->setFixedSize(620, 92);
+  personal_speed_zone_status->setStyleSheet(
+    "QLabel { background-color: rgba(49, 161, 238, 235); border: 6px solid white; "
+    "border-radius: 24px; color: white; font-size: 38px; font-weight: 700; padding: 4px; }");
+  personal_speed_zone_status->setVisible(false);
 }
 
 void OnroadWindow::resizeEvent(QResizeEvent *event) {
@@ -79,7 +88,10 @@ void OnroadWindow::resizeEvent(QResizeEvent *event) {
   frogpilot_onroad->setGeometry(rect());
   personal_speed_zone_button->move((width() - personal_speed_zone_button->width()) / 2,
                                    height() - personal_speed_zone_button->height() - UI_BORDER_SIZE * 2);
+  personal_speed_zone_status->move((width() - personal_speed_zone_status->width()) / 2,
+                                   personal_speed_zone_button->y() - personal_speed_zone_status->height() - UI_BORDER_SIZE);
   personal_speed_zone_button->raise();
+  personal_speed_zone_status->raise();
 }
 
 void OnroadWindow::updateState(const UIState &s, const FrogPilotUIState &fs) {
@@ -110,12 +122,15 @@ void OnroadWindow::updateState(const UIState &s, const FrogPilotUIState &fs) {
   nvg->frogpilot_nvg->alertHeight = alerts->alertHeight;
 
   frogpilot_onroad->updateState(s, fs);
-  updatePersonalSpeedZoneRecorder(s);
+  updatePersonalSpeedZoneRecorder(s, fs);
 }
 
-void OnroadWindow::updatePersonalSpeedZoneRecorder(const UIState &s) {
+void OnroadWindow::updatePersonalSpeedZoneRecorder(const UIState &s, const FrogPilotUIState &fs) {
   personal_speed_zone_position_valid = false;
   const SubMaster &sm = *(s.sm);
+  const auto car_state = sm["carState"].getCarState();
+  personal_speed_zone_current_speed_mps = car_state.getVEgoCluster() > 0 ? car_state.getVEgoCluster() : car_state.getVEgo();
+  if (!std::isfinite(personal_speed_zone_current_speed_mps)) personal_speed_zone_current_speed_mps = 0.0;
   if (sm.alive("liveLocationKalman")) {
     const auto location = sm["liveLocationKalman"].getLiveLocationKalman();
     const auto position = location.getPositionGeodetic();
@@ -133,8 +148,34 @@ void OnroadWindow::updatePersonalSpeedZoneRecorder(const UIState &s) {
     }
   }
 
-  personal_speed_zone_button->setVisible(!alerts->hasAlert());
-  if (!alerts->hasAlert()) personal_speed_zone_button->raise();
+  const SubMaster &fpsm = *(fs.sm);
+  const auto frogpilot_plan = fpsm["frogpilotPlan"].getFrogpilotPlan();
+  const bool zone_active = frogpilot_plan.getPersonalSpeedZoneActive();
+  const int saved_zone_count = frogpilot_plan.getPersonalSpeedZoneCount();
+  const bool has_alert = alerts->hasAlert();
+
+  if (!personal_speed_zone_message_visible) {
+    if (personal_speed_zone_start.isEmpty()) {
+      personal_speed_zone_button->setText(saved_zone_count == 1 ? tr("MARK SLOWDOWN\n1 ZONE SAVED") :
+                                           tr("MARK SLOWDOWN\n%1 ZONES SAVED").arg(saved_zone_count));
+    } else {
+      personal_speed_zone_button->setText(tr("MARK RESUME\nHOLD TO CANCEL"));
+    }
+  }
+
+  const bool metric = s.scene.is_metric;
+  const double speed_conversion = metric ? 3.6 : 2.2369362921;
+  const QString speed_unit = metric ? tr("km/h") : tr("mph");
+  personal_speed_zone_status->setText(tr("ZONE ACTIVE: %1 %2")
+    .arg(static_cast<int>(std::lround(frogpilot_plan.getPersonalSpeedZoneTarget() * speed_conversion)))
+    .arg(speed_unit));
+  personal_speed_zone_status->setVisible(zone_active && !has_alert);
+
+  personal_speed_zone_button->setVisible(params.getBool("PersonalSpeedZoneButton") && !has_alert);
+  if (!has_alert) {
+    personal_speed_zone_button->raise();
+    personal_speed_zone_status->raise();
+  }
 }
 
 void OnroadWindow::showPersonalSpeedZoneMessage(const QString &message, const QString &color, int duration_ms) {
@@ -150,7 +191,7 @@ void OnroadWindow::showPersonalSpeedZoneMessage(const QString &message, const QS
       "border-radius: 32px; color: white; font-size: 43px; font-weight: 700; padding: 8px; } "
       "QPushButton:pressed { background-color: rgba(13, 94, 48, 245); }");
     personal_speed_zone_button->setText(personal_speed_zone_start.isEmpty() ? tr("MARK SLOWDOWN") : tr("MARK RESUME\nHOLD TO CANCEL"));
-    personal_speed_zone_button->setVisible(!alerts->hasAlert());
+    personal_speed_zone_button->setVisible(params.getBool("PersonalSpeedZoneButton") && !alerts->hasAlert());
   });
 }
 
@@ -163,6 +204,7 @@ void OnroadWindow::handlePersonalSpeedZoneRelease() {
 
   if (!personal_speed_zone_start.isEmpty() && personal_speed_zone_press_timer.isValid() && personal_speed_zone_press_timer.elapsed() >= 1500) {
     personal_speed_zone_start = QJsonObject();
+    personal_speed_zone_recording_target_mph = params.getInt("PersonalSpeedZoneTarget");
     QApplication::beep();
     showPersonalSpeedZoneMessage(tr("RECORDING CANCELED"), "rgba(218, 111, 37, 245)");
     return;
@@ -175,8 +217,10 @@ void OnroadWindow::handlePersonalSpeedZoneRelease() {
 
   if (personal_speed_zone_start.isEmpty()) {
     personal_speed_zone_start = personal_speed_zone_position;
+    personal_speed_zone_recording_target_mph = selectPersonalSpeedZoneTargetMph(
+      params.getInt("PersonalSpeedZoneTarget"), params.getBool("PersonalSpeedZoneUseCurrentSpeed"), personal_speed_zone_press_speed_mps);
     QApplication::beep();
-    showPersonalSpeedZoneMessage(tr("START SAVED"), "rgba(23, 134, 68, 245)", 1200);
+    showPersonalSpeedZoneMessage(tr("START SAVED: %1 MPH").arg(personal_speed_zone_recording_target_mph), "rgba(23, 134, 68, 245)", 1200);
     return;
   }
 
@@ -193,7 +237,7 @@ void OnroadWindow::handlePersonalSpeedZoneRelease() {
   }
 
   if (!appendPersonalSpeedZone("/data/personal_speed_zones.json", personal_speed_zone_start,
-                               personal_speed_zone_position, params.getInt("PersonalSpeedZoneTarget"))) {
+                               personal_speed_zone_position, personal_speed_zone_recording_target_mph)) {
     showPersonalSpeedZoneMessage(tr("SAVE FAILED"), "rgba(201, 34, 49, 245)");
     return;
   }
@@ -286,6 +330,7 @@ void OnroadWindow::offroadTransition(bool offroad) {
     personal_speed_zone_message_visible = false;
     personal_speed_zone_button->setText(tr("MARK SLOWDOWN"));
     personal_speed_zone_button->setVisible(false);
+    personal_speed_zone_status->setVisible(false);
   }
 }
 

@@ -2,6 +2,7 @@
 
 #include <QElapsedTimer>
 #include <QJsonObject>
+#include <QLabel>
 #include <QPushButton>
 
 #include "selfdrive/ui/qt/onroad/alerts.h"
@@ -26,7 +27,7 @@ private:
   void paintEvent(QPaintEvent *event);
   void mousePressEvent(QMouseEvent* e) override;
   void showPersonalSpeedZoneMessage(const QString &message, const QString &color, int duration_ms = 2000);
-  void updatePersonalSpeedZoneRecorder(const UIState &s);
+  void updatePersonalSpeedZoneRecorder(const UIState &s, const FrogPilotUIState &fs);
   OnroadAlerts *alerts;
   AnnotatedCameraWidget *nvg;
   QColor bg = bg_colors[STATUS_DISENGAGED];
@@ -40,12 +41,16 @@ private:
 
   Params params;
   QPushButton *personal_speed_zone_button;
+  QLabel *personal_speed_zone_status;
   QElapsedTimer personal_speed_zone_press_timer;
   QElapsedTimer personal_speed_zone_tap_timer;
   QJsonObject personal_speed_zone_start;
   QJsonObject personal_speed_zone_position;
   bool personal_speed_zone_message_visible = false;
   bool personal_speed_zone_position_valid = false;
+  double personal_speed_zone_current_speed_mps = 0.0;
+  double personal_speed_zone_press_speed_mps = 0.0;
+  int personal_speed_zone_recording_target_mph = 25;
 
 private slots:
   void offroadTransition(bool offroad);
