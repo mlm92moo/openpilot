@@ -42,13 +42,24 @@ private:
   Params params;
   QPushButton *personal_speed_zone_button;
   QLabel *personal_speed_zone_status;
+  bool personal_speed_zone_button_enabled = true;
+  bool personal_speed_zone_current_speed_valid = false;
+  bool personal_speed_zone_metric = false;
   QElapsedTimer personal_speed_zone_press_timer;
+  QElapsedTimer personal_speed_zone_param_timer;
+  QElapsedTimer personal_speed_zone_recording_timer;
   QElapsedTimer personal_speed_zone_tap_timer;
+  QJsonObject personal_speed_zone_press_position;
   QJsonObject personal_speed_zone_start;
   QJsonObject personal_speed_zone_position;
   bool personal_speed_zone_message_visible = false;
+  bool personal_speed_zone_onroad = false;
+  bool personal_speed_zone_press_position_valid = false;
+  bool personal_speed_zone_press_speed_valid = false;
   bool personal_speed_zone_position_valid = false;
+  bool personal_speed_zone_recording_uses_current_speed = false;
   double personal_speed_zone_current_speed_mps = 0.0;
+  double personal_speed_zone_min_speed_mps = 0.0;
   double personal_speed_zone_press_speed_mps = 0.0;
   int personal_speed_zone_recording_target_mph = 25;
 

@@ -6,7 +6,7 @@ import os
 import pytest
 
 from openpilot.common.conversions import Conversions as CV
-from openpilot.frogpilot.controls.lib.personal_speed_controller import EARTH_RADIUS_M, PersonalSpeedController
+from openpilot.frogpilot.controls.lib.personal_speed_controller import ACTIVE_ZONE_TIMEOUT_S, EARTH_RADIUS_M, PersonalSpeedController
 
 BASE_LATITUDE = 37.0
 BASE_LONGITUDE = -122.0
@@ -127,6 +127,17 @@ def test_empty_configuration_clears_saved_and_active_zones(configured_controller
   assert controller.applied_target is None
 
 
+def test_atomic_replacement_is_reloaded_even_when_mtime_is_unchanged(configured_controller):
+  controller, config_path = configured_controller
+  activate(controller)
+  previous_mtime = config_path.stat().st_mtime_ns
+  write_config(config_path, [], apply_target=False)
+  os.utime(config_path, ns=(previous_mtime, previous_mtime))
+  update(controller, 2, position(25))
+  assert controller.zones == ()
+  assert not controller.active_zone_ids
+
+
 def test_temporary_gps_loss_retains_active_target(configured_controller):
   controller, _ = configured_controller
   activate(controller)
@@ -158,17 +169,51 @@ def test_stale_gps_breaks_crossing_continuity(configured_controller):
   controller, _ = configured_controller
   update(controller, 0, position(-5))
   update(controller, 0.5, position(-5))
-  update(controller, 1.5, position(-5))
-  update(controller, 2, position(5))
+  update(controller, 1.6, position(-5))
+  update(controller, 2.1, position(5))
   assert not controller.active_zone_ids
 
 
-def test_disengaged_crossing_does_not_activate(configured_controller):
+def test_disengaged_crossing_is_recognized_but_not_applied_until_engaged(configured_controller):
   controller, _ = configured_controller
   update(controller, 0, position(-5), enabled=False)
   update(controller, 1, position(5), enabled=False)
-  update(controller, 2, position(10), enabled=True)
+  assert controller.active_zone_ids == {"school-curve"}
+  assert controller.get_target(30, False, False) == 30
+  assert controller.get_target(30, True, True) == pytest.approx(35 * CV.MPH_TO_MS)
+
+
+def test_gas_override_crossing_is_applied_after_override_ends(configured_controller):
+  controller, _ = configured_controller
+  update(controller, 0, position(-5), enabled=True, openpilot_longitudinal=False)
+  update(controller, 1, position(5), enabled=True, openpilot_longitudinal=False)
+  assert controller.active_zone_ids == {"school-curve"}
+  assert controller.get_target(30, True, False) == 30
+  assert controller.get_target(30, True, True) == pytest.approx(35 * CV.MPH_TO_MS)
+
+
+def test_crawl_speed_start_crossing_activates(configured_controller):
+  controller, _ = configured_controller
+  for step in range(31):
+    update(controller, step / 10, position(-0.6 + 0.04 * step))
+  assert controller.active_zone_ids == {"school-curve"}
+
+
+def test_crawl_speed_end_crossing_releases(configured_controller):
+  controller, _ = configured_controller
+  activate(controller)
+  update(controller, 2, position(49.4))
+  for step in range(1, 31):
+    update(controller, 2 + step / 10, position(49.4 + 0.04 * step))
   assert not controller.active_zone_ids
+
+
+def test_active_zone_times_out_if_end_gate_is_missed(configured_controller):
+  controller, _ = configured_controller
+  activate(controller)
+  update(controller, ACTIVE_ZONE_TIMEOUT_S + 2, position(25))
+  assert not controller.active_zone_ids
+  assert controller.applied_target is None
 
 
 def test_driver_set_speed_below_zone_target_remains_controlling(configured_controller):

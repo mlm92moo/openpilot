@@ -53,6 +53,7 @@ private:
   FrogPilotButtonsControl *weatherKeyControl;
 
   FrogPilotParamValueControl *longitudinalActuatorDelayToggle;
+  FrogPilotParamValueControl *personalSpeedZoneTargetToggle;
   FrogPilotParamValueControl *startAccelToggle;
   FrogPilotParamValueControl *stopAccelToggle;
   FrogPilotParamValueControl *stoppingDecelRateToggle;

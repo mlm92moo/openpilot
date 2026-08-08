@@ -109,8 +109,8 @@ FrogPilotLongitudinalPanel::FrogPilotLongitudinalPanel(FrogPilotSettingsWindow *
     {"ShowCSCStatus", tr("Status Widget"), tr("<b>Show the \"Curve Speed Controller\" target speed on the driving screen.</b>"), ""},
 
     {"PersonalSpeedZoneButton", tr("Mark Slowdown Button"), tr("<b>Show the button used to record personal slowdown zones on the driving screen.</b> Hiding the button does not disable zones you already saved."), "../../frogpilot/assets/toggle_icons/icon_speed_map.png"},
-    {"PersonalSpeedZoneTarget", tr("Marked Zone Speed"), tr("<b>The target speed saved with each new slowdown zone.</b> This setting is used unless \"Use Current Speed\" is enabled."), ""},
-    {"PersonalSpeedZoneUseCurrentSpeed", tr("Use Current Speed"), tr("<b>Use the vehicle's current speed when you press \"MARK SLOWDOWN\" as that zone's target speed.</b> The saved speed is rounded to the nearest mph and limited to 12-90 mph."), ""},
+    {"PersonalSpeedZoneTarget", tr("Marked Zone Speed"), tr("<b>The target speed saved with each new slowdown zone.</b> This setting is used unless \"Use Lowest Recorded Speed\" is enabled."), ""},
+    {"PersonalSpeedZoneUseCurrentSpeed", tr("Use Lowest Recorded Speed"), tr("<b>Use the lowest vehicle speed observed between \"MARK SLOWDOWN\" and \"MARK RESUME\" as that zone's target.</b> The saved speed is limited to 12-90 mph."), ""},
     {"ErasePersonalSpeedZones", tr("Erase All Saved Zones"), tr("<b>Permanently erase every personal slowdown zone and its saved speed.</b>"), ""},
 
     {"CustomPersonalities", tr("Driving Personalities"), tr("<b>Customize the \"Driving Personalities\"</b> to better match your driving style."), "../../frogpilot/assets/toggle_icons/icon_personality.png"},
@@ -306,7 +306,8 @@ FrogPilotLongitudinalPanel::FrogPilotLongitudinalPanel(FrogPilotSettingsWindow *
       longitudinalToggle = resetCurveDataButton;
 
     } else if (param == "PersonalSpeedZoneTarget") {
-      longitudinalToggle = new FrogPilotParamValueControl(param, title, desc, icon, 12, 90, tr(" mph"));
+      personalSpeedZoneTargetToggle = new FrogPilotParamValueControl(param, title, desc, icon, 12, 90, tr(" mph"));
+      longitudinalToggle = personalSpeedZoneTargetToggle;
 
     } else if (param == "PersonalSpeedZoneButton") {
       FrogPilotManageControl *personalSpeedZoneToggle = new FrogPilotManageControl(param, title, desc, icon);
@@ -882,6 +883,7 @@ void FrogPilotLongitudinalPanel::updateMetric(bool metric, bool bootRun) {
   static std::map<float, QString> imperialDistanceLabels;
   static std::map<float, QString> imperialSpeedLabels;
   static std::map<float, QString> metricDistanceLabels;
+  static std::map<float, QString> metricPersonalSpeedZoneLabels;
   static std::map<float, QString> metricSpeedLabels;
 
   static bool labelsInitialized = false;
@@ -900,6 +902,10 @@ void FrogPilotLongitudinalPanel::updateMetric(bool metric, bool bootRun) {
 
     for (int i = -150; i <= 150; ++i) {
       metricSpeedLabels[i] = i == 0 ? tr("Off") : QString::number(i) + tr(" km/h");
+    }
+
+    for (int i = 12; i <= 90; ++i) {
+      metricPersonalSpeedZoneLabels[i] = QString::number(std::lround(i * MILE_TO_KM)) + tr(" km/h");
     }
 
     labelsInitialized = true;
@@ -957,6 +963,7 @@ void FrogPilotLongitudinalPanel::updateMetric(bool metric, bool bootRun) {
     offset5Toggle->updateControl(-150, 150, metricSpeedLabels);
     offset6Toggle->updateControl(-150, 150, metricSpeedLabels);
     offset7Toggle->updateControl(-150, 150, metricSpeedLabels);
+    personalSpeedZoneTargetToggle->updateControl(12, 90, metricPersonalSpeedZoneLabels);
     setSpeedOffsetToggle->updateControl(-150, 150, metricSpeedLabels);
   } else {
     offset1Toggle->setTitle(tr("Speed Offset (0–24 mph)"));
@@ -992,6 +999,7 @@ void FrogPilotLongitudinalPanel::updateMetric(bool metric, bool bootRun) {
     offset5Toggle->updateControl(-99, 99, imperialSpeedLabels);
     offset6Toggle->updateControl(-99, 99, imperialSpeedLabels);
     offset7Toggle->updateControl(-99, 99, imperialSpeedLabels);
+    personalSpeedZoneTargetToggle->updateControl(12, 90);
     setSpeedOffsetToggle->updateControl(0, 99, imperialSpeedLabels);
   }
 }

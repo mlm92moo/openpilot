@@ -2,20 +2,20 @@
 
 Personal Speed Zones are optional, directional GPS-defined cruise-speed targets for vehicles using openpilot longitudinal control. They do not send actuator commands, modify map data, or publish a posted speed limit. The selected target follows FrogPilot's normal `frogpilotPlan.vCruise` path into the longitudinal MPC.
 
-Zones can be captured from the comma touchscreen; coordinates do not need to be entered while driving. The resulting configuration is stored in `/data/personal_speed_zones.json`. The controller checks the file modification time and reloads a complete valid update. A malformed update does not replace the last valid configuration; removing the file clears the loaded zones.
+Zones can be captured from the comma touchscreen; coordinates do not need to be entered while driving. The resulting configuration is stored in `/data/personal_speed_zones.json`. The controller watches the file's modification time, creation time, size, and inode so atomic replacements are reloaded reliably. A malformed update does not replace the last valid configuration; removing the file clears the loaded zones.
 
-The controls are under **FrogPilot Settings → Gas / Brake → Mark Slowdown Button → MANAGE**. The main toggle shows or hides the recorder button without disabling saved zones. The management page also provides the target-speed selector, the current-speed option, and an **Erase All Saved Zones** action.
+The controls are under **FrogPilot Settings → Gas / Brake → Mark Slowdown Button → MANAGE**. The main toggle shows or hides the recorder button without disabling saved zones. The management page also provides the target-speed selector, the lowest-recorded-speed option, and an **Erase All Saved Zones** action.
 
 ## Record a zone from the driving screen
 
-When enabled, the recorder is available on the on-road screen whether openpilot is engaged or disengaged. It does not need to be armed while parked. **Marked Zone Speed** configures a fixed 12–90 mph target for newly recorded zones and defaults to 25 mph. If **Use Current Speed** is enabled, the vehicle speed captured when **MARK SLOWDOWN** is pressed is saved instead, rounded and limited to the same range.
+When enabled, the recorder is available on the on-road screen whether openpilot is engaged or disengaged. It does not need to be armed while parked. **Marked Zone Speed** configures a fixed 12–90 mph target for newly recorded zones and defaults to 25 mph. Metric devices display the equivalent km/h while the file retains mph for compatibility. If **Use Lowest Recorded Speed** is enabled, the lowest valid vehicle speed observed between **MARK SLOWDOWN** and **MARK RESUME** is saved instead, rounded and limited to the same range.
 
 One large button appears near the bottom center of the driving screen:
 
 1. Tap **MARK SLOWDOWN** at the GPS point where deceleration should begin.
 2. After passing through the turn, tap **MARK RESUME** where normal speed should resume.
 
-Each accepted tap gives an audible confirmation and a brief on-screen status. The first confirmation includes the speed that will be saved. The recorder rejects unavailable GPS, ignores rapid repeat taps, and requires the two points to be at least 10 meters apart. After saving the first point, hold **MARK RESUME** for 1.5 seconds to cancel that recording. After the second point is saved, the button resets to **MARK SLOWDOWN**, shows the number of zones currently loaded, and is immediately ready to record another zone. The recorder is hidden whenever an openpilot alert is displayed.
+Each tap snapshots GPS and speed when the button is pressed, then gives an audible confirmation and a brief on-screen status. The recorder rejects unavailable GPS, ignores rapid repeat taps, and requires the two points to be at least 10 meters apart. After saving the first point, hold **MARK RESUME** for 1.5 seconds to cancel that recording. An unfinished recording automatically cancels after 15 minutes; distance remains unlimited. After the second point is saved, the button resets to **MARK SLOWDOWN**, shows the number of zones currently loaded, and is immediately ready to record another zone. Re-recording nearly the same start, end, and direction updates the existing touchscreen zone rather than creating a duplicate. The recorder is hidden whenever an openpilot alert is displayed.
 
 When a saved zone is recognized, a separate blue **ZONE ACTIVE** badge displays its target speed. This badge is independent of the recorder-button toggle, so saved-zone recognition remains visible when the recording button is hidden. If zones overlap, it displays the lowest active target.
 
@@ -53,11 +53,11 @@ Each zone contains:
 
 A gate is a finite line perpendicular to its configured bearing. A crossing requires two consecutive, fresh, valid positions that move from the negative side to the positive side of the gate, match its heading, remain within the configured corridor, intersect its gate arm, and represent plausible vehicle movement. Being near a gate is not enough.
 
-Crossing a start gate while controls and openpilot longitudinal are active adds that zone to the active set. Crossing its end gate removes it. Overlapping zones select the lowest target. A lower driver-set cruise target remains controlling because the final selection is `min(normal_target, personal_target)`.
+Crossing a start gate adds that zone to the recognized active set even while openpilot is disengaged or the gas pedal is overriding longitudinal control. Crossing its end gate removes it. The target affects cruise only while controls and openpilot longitudinal are active, so a gas-pedal crossing is remembered and the target becomes eligible after the pedal is released. Overlapping zones select the lowest target. A lower driver-set cruise target remains controlling because the final selection is `min(normal_target, personal_target)`.
 
-Invalid or stale GPS breaks crossing continuity, so it cannot activate a new zone. If GPS is lost after activation, the active target is retained; reacquisition does not infer an end crossing across the missing interval. This intentionally favors retaining a lower speed rather than automatically accelerating.
+Invalid or stale GPS breaks crossing continuity, so it cannot activate a new zone. Fresh crawl-speed samples may accumulate for up to five seconds to detect a gate crossing without accepting stale samples. If an end gate is missed, including because GPS was lost, the active zone automatically releases after 10 minutes.
 
-Disengaging controls or openpilot longitudinal prevents new activation and prevents the personal target from affecting cruise. The controller retains active-zone state so that re-engagement inside a zone does not silently discard a previously established cap.
+Disengaging controls or openpilot longitudinal prevents the personal target from affecting cruise but does not prevent zone recognition. Re-engagement inside a recognized zone restores the cap until the end gate or 10-minute timeout releases it.
 
 ## Erasing saved zones
 
@@ -67,4 +67,4 @@ Choose **Erase All Saved Zones → ERASE** on the management page and confirm th
 
 - The on-device management page can erase all zones, but it does not yet list or edit individual zones.
 - The local tangent-plane calculation is intended for short gate-crossing segments, not long-distance routing.
-- A zone may remain active after GPS is lost across its end gate. Correct the GPS condition or reload a valid configuration that disables the zone before continuing.
+- The 10-minute active timeout means a single marked zone cannot continuously constrain cruise for longer than 10 minutes, even though its recorded distance is unlimited.

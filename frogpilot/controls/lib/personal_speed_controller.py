@@ -14,12 +14,14 @@ except ImportError:
   cloudlog = logging.getLogger(__name__)
 
 CONFIG_PATH = "/data/personal_speed_zones.json"
+ACTIVE_ZONE_TIMEOUT_S = 10 * 60
 EARTH_RADIUS_M = 6_371_000.0
 GPS_ACCURACY_MARGIN_M = 5.0
 MAX_GPS_AGE_S = 1.0
 MAX_GPS_JUMP_M = 100.0
 MAX_GPS_SPEED_MPS = 80.0
 MIN_GPS_MOVEMENT_M = 0.5
+LOW_SPEED_ACCUMULATION_TIMEOUT_S = 5.0
 
 
 @dataclass(frozen=True)
@@ -88,14 +90,16 @@ class PersonalSpeedController:
     self.max_target = max_target
 
     self.active_zone_ids: set[str] = set()
+    self.active_zone_started_at: dict[str, object] = {}
     self.applied_target: float | None = None
     self.apply_target = False
     self.target: float | None = None
     self.zones: tuple[PersonalSpeedZone, ...] = ()
 
-    self._observed_mtime_ns: int | None = None
+    self._observed_file_signature: tuple[int, int, int, int] | None = None
+    self._last_sample_time = None
+    self._previous_crossing_allowed = False
     self._previous_position: GPSPosition | None = None
-    self._previous_activation_allowed = False
     self._previous_time = None
 
   @staticmethod
@@ -204,20 +208,22 @@ class PersonalSpeedController:
 
   def _reload_if_changed(self) -> None:
     try:
-      mtime_ns = os.stat(self.config_path).st_mtime_ns
+      file_stat = os.stat(self.config_path)
+      file_signature = (file_stat.st_mtime_ns, file_stat.st_ctime_ns, file_stat.st_size, file_stat.st_ino)
     except OSError:
-      if self._observed_mtime_ns is not None:
-        self._observed_mtime_ns = None
+      if self._observed_file_signature is not None:
+        self._observed_file_signature = None
         self.apply_target = False
         self.zones = ()
         self.active_zone_ids.clear()
+        self.active_zone_started_at.clear()
         self._update_target()
         _log_event("personal_speed_zones_config_loaded", apply_target=False, zone_count=0)
       return
-    if mtime_ns == self._observed_mtime_ns:
+    if file_signature == self._observed_file_signature:
       return
 
-    self._observed_mtime_ns = mtime_ns
+    self._observed_file_signature = file_signature
     try:
       with open(self.config_path, encoding="utf-8") as config_file:
         apply_target, zones = self._parse_config(json.load(config_file))
@@ -229,6 +235,8 @@ class PersonalSpeedController:
     self.zones = zones
     valid_zone_ids = {zone.zone_id for zone in zones}
     self.active_zone_ids.intersection_update(valid_zone_ids)
+    self.active_zone_started_at = {zone_id: started_at for zone_id, started_at in self.active_zone_started_at.items()
+                                   if zone_id in valid_zone_ids}
     self._update_target()
     _log_event("personal_speed_zones_config_loaded", apply_target=apply_target, zone_count=len(zones))
 
@@ -237,6 +245,13 @@ class PersonalSpeedController:
     applied_targets = [zone.target for zone in self.zones if zone.zone_id in self.active_zone_ids and zone.apply_target]
     self.target = min(active_targets, default=None)
     self.applied_target = min(applied_targets, default=None)
+
+  def _expire_active_zones(self, now) -> None:
+    for zone_id, started_at in list(self.active_zone_started_at.items()):
+      if self._elapsed_seconds(started_at, now) >= ACTIVE_ZONE_TIMEOUT_S:
+        self.active_zone_ids.discard(zone_id)
+        self.active_zone_started_at.pop(zone_id, None)
+        _log_event("personal_speed_zone_released", zone_id=zone_id, reason="timeout")
 
   @staticmethod
   def _elapsed_seconds(previous_time, current_time) -> float:
@@ -247,40 +262,48 @@ class PersonalSpeedController:
 
   def update(self, gps_position: object, now, controls_enabled: bool, openpilot_longitudinal: bool) -> None:
     self._reload_if_changed()
+    self._expire_active_zones(now)
 
-    activation_allowed = controls_enabled and openpilot_longitudinal
     current_position = self._parse_position(gps_position)
     if current_position is None:
       self._previous_position = None
-      self._previous_activation_allowed = False
+      self._previous_crossing_allowed = False
       self._previous_time = None
+      self._last_sample_time = None
+      self._update_target()
       return
 
     previous_position = self._previous_position
     plausible_movement = False
     if previous_position is not None:
       elapsed = self._elapsed_seconds(self._previous_time, now)
+      sample_age = self._elapsed_seconds(self._last_sample_time, now)
       movement = _distance(previous_position, current_position)
       max_movement = min(MAX_GPS_JUMP_M, MAX_GPS_SPEED_MPS * elapsed + GPS_ACCURACY_MARGIN_M)
-      plausible_movement = 0 < elapsed <= MAX_GPS_AGE_S and MIN_GPS_MOVEMENT_M <= movement <= max_movement
+      samples_continuous = 0 < sample_age <= MAX_GPS_AGE_S
+      plausible_movement = samples_continuous and 0 < elapsed <= LOW_SPEED_ACCUMULATION_TIMEOUT_S and MIN_GPS_MOVEMENT_M <= movement <= max_movement
 
-      if movement < MIN_GPS_MOVEMENT_M and 0 < elapsed <= MAX_GPS_AGE_S:
+      if samples_continuous and movement < MIN_GPS_MOVEMENT_M and 0 < elapsed < LOW_SPEED_ACCUMULATION_TIMEOUT_S:
+        self._last_sample_time = now
+        self._update_target()
         return
 
-    if plausible_movement:
+    if plausible_movement and self._previous_crossing_allowed:
       for zone in self.zones:
         if zone.zone_id in self.active_zone_ids:
           if self._crossed_gate(previous_position, current_position, zone.end, zone):
             self.active_zone_ids.remove(zone.zone_id)
+            self.active_zone_started_at.pop(zone.zone_id, None)
             _log_event("personal_speed_zone_released", zone_id=zone.zone_id)
-        elif activation_allowed and self._previous_activation_allowed and self._crossed_gate(previous_position, current_position, zone.start, zone):
+        elif self._crossed_gate(previous_position, current_position, zone.start, zone):
           self.active_zone_ids.add(zone.zone_id)
+          self.active_zone_started_at[zone.zone_id] = now
           _log_event("personal_speed_zone_activated", zone_id=zone.zone_id, target_mps=zone.target, apply_target=zone.apply_target)
 
-    continuity_valid = previous_position is None or plausible_movement
+    self._previous_crossing_allowed = previous_position is None or plausible_movement
     self._previous_position = current_position
-    self._previous_activation_allowed = activation_allowed and continuity_valid
     self._previous_time = now
+    self._last_sample_time = now
     self._update_target()
 
   def get_target(self, normal_cruise_target: float, controls_enabled: bool, openpilot_longitudinal: bool) -> float:
