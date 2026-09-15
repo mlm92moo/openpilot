@@ -47,8 +47,10 @@ class ControllerTests(unittest.TestCase):
   def test_disabled_has_no_road_limit_and_absolute_cap_is_separate(self):
     disabled = self.update(Config(), source())
     self.assertEqual(disabled["effective_cap_mps"], self.driver)
+    self.assertFalse(disabled["restriction_active"])
     absolute = self.update(Config(False, absolute_max_mps=60 * MPH), source())
     self.assertAlmostEqual(absolute["effective_cap_mps"], 60 * MPH)
+    self.assertTrue(absolute["restriction_active"])
 
   def test_invalid_values_are_rejected(self):
     with self.assertRaises(ValueError):

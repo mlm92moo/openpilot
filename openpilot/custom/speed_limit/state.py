@@ -16,12 +16,12 @@ def service_fields(result):
   Cap'n Proto scalar fields have no `None`, so each optional speed has a
   companion `has...` flag. This boundary keeps that conversion out of policy.
   """
-  required = {"enabled", "control_eligible", "source_state", "source_revision",
+  required = {"enabled", "restriction_active", "control_eligible", "source_state", "source_revision",
               "detected_limit_mps", "accepted_limit_mps", "effective_cap_mps"}
   if type(result) is not dict or required - result.keys():
     raise ValueError("incomplete controller result")
-  if type(result["enabled"]) is not bool or type(result["control_eligible"]) is not bool:
-    raise ValueError("enabled and control_eligible must be boolean")
+  if any(type(result[key]) is not bool for key in ("enabled", "restriction_active", "control_eligible")):
+    raise ValueError("restriction booleans must be boolean")
   if type(result["source_state"]) is not str or type(result["source_revision"]) is not int or result["source_revision"] < 0:
     raise ValueError("invalid source metadata")
   has_detected, detected = _optional_float(result["detected_limit_mps"], "detected_limit_mps")
@@ -29,6 +29,7 @@ def service_fields(result):
   _, effective = _optional_float(result["effective_cap_mps"], "effective_cap_mps")
   return {
     "enabled": result["enabled"],
+    "restrictionActive": result["restriction_active"],
     "controlEligible": result["control_eligible"],
     "sourceFresh": bool(result.get("detected_limit_fresh", False)),
     "sourceRevision": result["source_revision"],

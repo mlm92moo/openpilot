@@ -19,8 +19,9 @@ def main():
   ldw = LaneDepartureWarning()
   longitudinal_planner = LongitudinalPlanner(CP)
   pm = messaging.PubMaster(['longitudinalPlan', 'driverAssistance'])
-  sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'vehicleParameters', 'radarState', 'modelV2', 'selfdriveState'],
-                           poll='modelV2')
+  sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'vehicleParameters', 'radarState', 'modelV2', 'selfdriveState',
+                            'speedLimitState'], poll='modelV2', ignore_alive=['speedLimitState'],
+                           ignore_avg_freq=['speedLimitState'], ignore_valid=['speedLimitState'])
 
   while True:
     sm.update()

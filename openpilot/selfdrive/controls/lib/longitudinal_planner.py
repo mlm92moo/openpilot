@@ -13,6 +13,7 @@ from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import Longi
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan, should_stop
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
+from openpilot.custom.speed_limit.planner import cap_cruise
 from openpilot.common.swaglog import cloudlog
 
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
@@ -81,6 +82,7 @@ class LongitudinalPlanner:
     v_ego = sm['carState'].vEgo
     v_cruise_kph = min(sm['carState'].vCruise, V_CRUISE_MAX)
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
+    v_cruise = cap_cruise(v_cruise, sm['speedLimitState'])
     if sm['controlsState'].forceDecel:
       v_cruise = 0.0
 

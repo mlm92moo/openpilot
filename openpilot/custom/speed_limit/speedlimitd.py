@@ -73,7 +73,7 @@ def main():
     # An unset cruise value is not a policy input. Publish source diagnostics
     # but do not advance controller state until carState supplies a positive value.
     if driver_cruise_mps is None or driver_cruise_mps <= 0:
-      result = {"enabled": False, "control_eligible": False, "source_state": "awaiting_driver_cruise",
+      result = {"enabled": False, "restriction_active": False, "control_eligible": False, "source_state": "awaiting_driver_cruise",
                 "source_revision": 0, "detected_limit_mps": None, "detected_limit_fresh": False,
                 "accepted_limit_mps": None, "effective_cap_mps": 0.0}
     else:

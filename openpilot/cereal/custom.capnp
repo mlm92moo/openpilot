@@ -21,6 +21,7 @@ struct SpeedLimitState @0x81c2f05a394cf4af {
   hasAcceptedLimit @7 :Bool;
   acceptedLimitMps @8 :Float32;
   effectiveCapMps @9 :Float32;
+  restrictionActive @10 :Bool;
 }
 
 struct CustomReserved1 @0xaedffd8f31e7b55d {

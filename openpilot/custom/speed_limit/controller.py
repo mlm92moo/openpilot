@@ -152,6 +152,8 @@ class Controller:
 
     effective = min(caps)
     return {
+      "enabled": config.enabled,
+      "restriction_active": bool(config.absolute_max_mps is not None or (config.enabled and self.accepted_limit_mps is not None)),
       "driver_cruise_mps": float(driver_cruise_mps),
       "effective_cap_mps": effective,
       "road_cap_mps": road_cap,
