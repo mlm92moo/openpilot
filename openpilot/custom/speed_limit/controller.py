@@ -144,7 +144,7 @@ class Controller:
       # The source may be stale, but the retained cap is visibly distinct.
       road_cap = finite_positive("accepted offset cap", self.accepted_limit_mps + config.offset_mps)
       caps.append(road_cap)
-      source_state = "accepted" if source.fresh else "stale_restriction"
+      source_state = "accepted" if source.fresh and source.limit_mps is not None else "stale_restriction"
     elif config.enabled and self.pending_limit_mps is not None:
       source_state = "pending_acceptance" if source.fresh else "stale_pending"
     elif config.enabled and source.limit_mps is not None:

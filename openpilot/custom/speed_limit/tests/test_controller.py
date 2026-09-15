@@ -2,7 +2,7 @@
 import math
 import unittest
 
-from openpilot.custom.speed_limit import Action, Config, Controller, SourceState
+from openpilot.custom.speed_limit import Action, Config, Controller, Runtime, SourceState
 
 MPH = .44704
 
@@ -55,3 +55,18 @@ class ControllerTests(unittest.TestCase):
       Config(offset_mps=math.nan)
     with self.assertRaises(ValueError):
       self.controller.update(Config(), source(), 0)
+
+  def test_runtime_uses_only_persistent_fresh_observer_values(self):
+    runtime = Runtime()
+    config = Config(True, 5 * MPH, True, True)
+    candidate = {"rsa1_fresh": True, "persistent_primary_mps": None, "state": "numeric_observation"}
+    first = runtime.update(config, candidate, self.driver)
+    self.assertEqual(first["source_state"], "unavailable")
+    stable = {"rsa1_fresh": True, "persistent_primary_mps": 55 * MPH, "state": "numeric_observation"}
+    accepted = runtime.update(config, stable, self.driver)
+    self.assertAlmostEqual(accepted["effective_cap_mps"], 60 * MPH)
+    revision = accepted["source_revision"]
+    self.assertEqual(runtime.update(config, stable, self.driver)["source_revision"], revision)
+    stale = runtime.update(config, {"rsa1_fresh": False, "persistent_primary_mps": 55 * MPH, "state": "stale"}, self.driver)
+    self.assertEqual(stale["source_state"], "stale_restriction")
+    self.assertAlmostEqual(stale["effective_cap_mps"], 60 * MPH)
