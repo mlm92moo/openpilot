@@ -1,5 +1,6 @@
 import unittest
 
+from openpilot.custom.speed_limit import Config, Runtime
 from openpilot.custom.speed_limit.state import service_fields
 
 
@@ -19,3 +20,12 @@ class StateTests(unittest.TestCase):
   def test_malformed_policy_output_is_rejected(self):
     with self.assertRaises(ValueError):
       service_fields({"enabled": True})
+
+  def test_runtime_output_maps_to_active_restriction(self):
+    result = Runtime().update(Config(True, 0, True, True), {
+      "rsa1_fresh": True, "persistent_primary_mps": 25.0, "state": "numeric_observation",
+    }, 30.0)
+    fields = service_fields(result)
+    self.assertTrue(fields["enabled"])
+    self.assertTrue(fields["restrictionActive"])
+    self.assertEqual(fields["effectiveCapMps"], 25.0)
