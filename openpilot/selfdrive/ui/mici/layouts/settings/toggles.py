@@ -66,7 +66,8 @@ class TogglesLayoutMici(NavScroller):
 
     # Toggle lists
     self._refresh_toggles = (
-      (\
+      ("ExperimentalMode", self._experimental_btn),
+      ("SpeedLimitControlEnabled", self._speed_limit_control),
       ("IsMetric", is_metric_toggle),
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),

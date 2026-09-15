@@ -185,7 +185,9 @@ class HudRenderer(Widget):
     speed_conversion = CV.MS_TO_KPH if ui_state.is_metric else CV.MS_TO_MPH
     self.speed = max(0.0, v_ego * speed_conversion)
 
-    speed_limit_state = sm[\
+    speed_limit_state = sm["speedLimitState"]
+    self.speed_limit = speed_limit_state.detectedLimitMps * speed_conversion if speed_limit_state.hasDetectedLimit else None
+    self.effective_speed_cap = speed_limit_state.effectiveCapMps * speed_conversion if speed_limit_state.restrictionActive else None
 
   def _render(self, rect: rl.Rectangle) -> None:
     """Render HUD elements to the screen."""
