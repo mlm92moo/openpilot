@@ -10,7 +10,17 @@ $Cxx.namespace("cereal");
 # DO rename the structs
 # DON'T change the identifier (e.g. @0x81c2f05a394cf4af)
 
-struct CustomReserved0 @0x81c2f05a394cf4af {
+struct SpeedLimitState @0x81c2f05a394cf4af {
+  enabled @0 :Bool;
+  controlEligible @1 :Bool;
+  sourceFresh @2 :Bool;
+  sourceRevision @3 :UInt64;
+  sourceState @4 :Text;
+  hasDetectedLimit @5 :Bool;
+  detectedLimitMps @6 :Float32;
+  hasAcceptedLimit @7 :Bool;
+  acceptedLimitMps @8 :Float32;
+  effectiveCapMps @9 :Float32;
 }
 
 struct CustomReserved1 @0xaedffd8f31e7b55d {
