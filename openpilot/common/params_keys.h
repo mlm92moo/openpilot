@@ -110,6 +110,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"RecordFrontLock", {PERSISTENT, BOOL}},  // for the internal fleet
     {"SecOCKey", {PERSISTENT | DONT_LOG, STRING}},
     {"SpeedLimitControlEnabled", {PERSISTENT, BOOL}},
+    {"SpeedLimitPortalEnabled", {PERSISTENT, BOOL}},
+    {"SpeedLimitPortalToken", {PERSISTENT | DONT_LOG, STRING}},
     {"SpeedLimitControlOffsetMps", {PERSISTENT, FLOAT, "0.0"}},
     {"SpeedLimitAutoAcceptLower", {PERSISTENT, BOOL}},
     {"SpeedLimitAutoAcceptHigher", {PERSISTENT, BOOL}},
