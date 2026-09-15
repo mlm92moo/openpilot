@@ -52,7 +52,7 @@ class UIState:
         "wideRoadCameraState",
         "managerState",
         "selfdriveState",
-        "longitudinalPlan",
+        \
         "gpsLocationExternal",
         "carOutput",
         "carControl",

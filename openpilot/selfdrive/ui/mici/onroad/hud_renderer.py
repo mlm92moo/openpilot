@@ -105,6 +105,8 @@ class HudRenderer(Widget):
     self.set_speed: float = SET_SPEED_NA
     self._set_speed_changed_time: float = 0
     self.speed: float = 0.0
+    self.speed_limit: float | None = None
+    self.effective_speed_cap: float | None = None
     self.v_ego_cluster_seen: bool = False
     self._engaged: bool = False
     self._small_model_engaged: bool = False
@@ -183,6 +185,8 @@ class HudRenderer(Widget):
     speed_conversion = CV.MS_TO_KPH if ui_state.is_metric else CV.MS_TO_MPH
     self.speed = max(0.0, v_ego * speed_conversion)
 
+    speed_limit_state = sm[\
+
   def _render(self, rect: rl.Rectangle) -> None:
     """Render HUD elements to the screen."""
 
@@ -190,12 +194,26 @@ class HudRenderer(Widget):
 
     if self.is_cruise_set:
       self._draw_set_speed(rect)
+    self._draw_speed_limit_status(rect)
 
     if ui_state.usbgpu and ui_state.usbgpu_compiled:
       self._draw_model_source(rect)
 
     self._draw_steering_wheel(rect)
 
+  def _draw_speed_limit_status(self, rect: rl.Rectangle) -> None:
+    if self.speed_limit is None and self.effective_speed_cap is None:
+      return
+    labels = []
+    if self.speed_limit is not None:
+      labels.append(f"LIMIT {round(self.speed_limit)}")
+    if self.effective_speed_cap is not None:
+      labels.append(f"CAP {round(self.effective_speed_cap)}")
+    text = "  ".join(labels)
+    text_size = measure_text_cached(self._font_semi_bold, text, 30)
+    rl.draw_text_ex(self._font_semi_bold, text,
+                    rl.Vector2(rect.x + rect.width - text_size.x - 28, rect.y + 28),
+                    30, 0, COLORS.WHITE_TRANSLUCENT)
   def _draw_model_source(self, rect: rl.Rectangle) -> None:
     if ui_state.sm.recv_frame['selfdriveState'] < ui_state.started_frame:
       return

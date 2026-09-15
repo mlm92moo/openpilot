@@ -44,6 +44,7 @@ class TogglesLayoutMici(NavScroller):
     self._personality_toggle = BigMultiParamToggle("driving personality", "LongitudinalPersonality", ["aggressive", "standard", "relaxed"])
     self._experimental_btn = BigToggle("experimental mode", initial_state=ui_state.params.get_bool("ExperimentalMode"),
                                        toggle_callback=self._on_experimental_mode)
+    self._speed_limit_control = BigParamControl("Toyota RSA speed limit control", "SpeedLimitControlEnabled")
     is_metric_toggle = BigParamControl("use metric units", "IsMetric")
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
@@ -54,6 +55,7 @@ class TogglesLayoutMici(NavScroller):
     self._scroller.add_widgets([
       self._personality_toggle,
       self._experimental_btn,
+      self._speed_limit_control,
       is_metric_toggle,
       ldw_toggle,
       always_on_dm_toggle,
@@ -64,7 +66,7 @@ class TogglesLayoutMici(NavScroller):
 
     # Toggle lists
     self._refresh_toggles = (
-      ("ExperimentalMode", self._experimental_btn),
+      (\
       ("IsMetric", is_metric_toggle),
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
@@ -74,6 +76,7 @@ class TogglesLayoutMici(NavScroller):
     )
 
     enable_openpilot.set_enabled(lambda: not ui_state.engaged)
+    self._speed_limit_control.set_enabled(lambda: not ui_state.engaged)
     record_front.set_enabled(False if ui_state.params.get_bool("RecordFrontLock") else (lambda: not ui_state.engaged))
     record_mic.set_enabled(lambda: not ui_state.engaged)
 
