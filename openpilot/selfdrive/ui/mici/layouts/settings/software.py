@@ -90,6 +90,8 @@ class CheckUpdateButton(BigButton):
       self.set_enabled(True)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
+    if ui_state.engaged:
+      return
     super()._handle_mouse_release(mouse_pos)
 
     if not system_time_valid():
@@ -119,9 +121,12 @@ class CheckUpdateButton(BigButton):
   def _update_state(self):
     super()._update_state()
 
-    if ui_state.started:
+    if ui_state.engaged:
       self.set_enabled(False)
       return
+
+    if self._state == UpdaterState.IDLE:
+      self.set_enabled(True)
 
     updater_state = ui_state.params.get("UpdaterState") or ""
     failed_count = ui_state.params.get("UpdateFailedCount") or 0
@@ -185,7 +190,8 @@ class CheckUpdateButton(BigButton):
 class InstallUpdateButton(BigButton):
   def __init__(self):
     super().__init__("install update", "", gui_app.texture("icons_mici/settings/device/reboot.png", 64, 70))
-    self.set_visible(lambda: ui_state.is_offroad() and ui_state.params.get_bool("UpdateAvailable"))
+    self.set_visible(lambda: not ui_state.engaged and ui_state.params.get_bool("UpdateAvailable"))
+    self.set_enabled(lambda: not ui_state.engaged)
 
   def _update_state(self):
     super()._update_state()
@@ -196,12 +202,14 @@ class InstallUpdateButton(BigButton):
       self.set_value(value)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
+    if ui_state.engaged:
+      return
     super()._handle_mouse_release(mouse_pos)
-
     self.set_enabled(False)
 
     def run():
-      ui_state.params.put_bool("DoReboot", True, block=True)
+      if not ui_state.engaged:
+        ui_state.params.put_bool("DoReboot", True, block=True)
 
     threading.Thread(target=run, daemon=True).start()
 
@@ -236,7 +244,7 @@ class TargetBranchButton(BigButton):
     super().__init__("target branch", ui_state.params.get("UpdaterTargetBranch") or "")
     self.set_click_callback(self._on_click)
     self.set_visible(not ui_state.params.get_bool("IsTestedBranch"))
-    self.set_enabled(lambda: ui_state.is_offroad())
+    self.set_enabled(lambda: not ui_state.engaged)
 
   def _update_state(self):
     super()._update_state()
@@ -246,9 +254,12 @@ class TargetBranchButton(BigButton):
       self.set_value(target)
 
   def _on_click(self):
-    gui_app.push_widget(BranchSelectPage(self._on_select))
+    if not ui_state.engaged:
+      gui_app.push_widget(BranchSelectPage(self._on_select))
 
   def _on_select(self, branch: str):
+    if ui_state.engaged:
+      return
     ui_state.params.put("UpdaterTargetBranch", branch, block=True)
     self.set_value(branch)
     subprocess.run("pkill -SIGUSR1 -f openpilot.system.updated.updated", shell=True)
