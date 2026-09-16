@@ -13,7 +13,9 @@ class Config:
   bus: int = 2
   persistence_s: float = 0.5
   minimum_events: int = 3
-  maximum_gap_s: float = 0.5
+  # Corolla RSA1 arrives at roughly 1 Hz. Keep a margin for normal CAN
+  # scheduling jitter, while retaining the 3-second freshness deadline.
+  maximum_gap_s: float = 1.5
   stale_s: float = 3.0
   minimum_kph: float = 5.0
   maximum_kph: float = 160.0
