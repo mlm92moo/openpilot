@@ -35,6 +35,15 @@ class ControllerTests(unittest.TestCase):
     self.assertEqual(result["accepted_revision"], 1)
     self.assertEqual(result["pending_revision"], 2)
 
+  def test_lower_only_does_not_accept_a_higher_first_candidate(self):
+    config = Config(True, 0, True, False)
+    higher = self.update(config, source(1, 80))
+    self.assertEqual(higher["source_state"], "pending_acceptance")
+    self.assertFalse(higher["restriction_active"])
+    lower = self.update(config, source(2, 55))
+    self.assertEqual(lower["source_state"], "accepted")
+    self.assertAlmostEqual(lower["effective_cap_mps"], 55 * MPH)
+
   def test_stale_restriction_needs_explicit_release(self):
     config = Config(True, 0, True, True)
     self.update(config, source(1, 55))

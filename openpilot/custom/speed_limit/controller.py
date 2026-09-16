@@ -83,7 +83,7 @@ class Controller:
     self.pending_revision = None
     self.pending_limit_mps = None
 
-  def _consider_source(self, config, source, action):
+  def _consider_source(self, config, source, action, driver_cruise_mps):
     if source.limit_mps is None or not source.fresh:
       # A source disappearing does not implicitly release a previously accepted
       # restriction. A new numeric candidate must be fresh to be considered.
@@ -96,7 +96,15 @@ class Controller:
       self._accept(source)
       return
     if self.accepted_limit_mps is None:
-      automatic = config.auto_accept_lower or config.auto_accept_higher
+      # Before any road limit is accepted, classify the first candidate against
+      # the driver's selected cruise speed. This makes "lower only" meaningful
+      # from the first sign seen after the controller is enabled.
+      if source.limit_mps < driver_cruise_mps:
+        automatic = config.auto_accept_lower
+      elif source.limit_mps > driver_cruise_mps:
+        automatic = config.auto_accept_higher
+      else:
+        automatic = config.auto_accept_lower or config.auto_accept_higher
     elif source.limit_mps < self.accepted_limit_mps:
       automatic = config.auto_accept_lower
     elif source.limit_mps > self.accepted_limit_mps:
@@ -127,7 +135,7 @@ class Controller:
       self.clear_road_limit()
       self.last_source_revision = source.revision
     if config.enabled:
-      self._consider_source(config, source, action)
+      self._consider_source(config, source, action, driver_cruise_mps)
     else:
       # Turning the source feature off removes all road-limit runtime state.
       self.clear_road_limit()
