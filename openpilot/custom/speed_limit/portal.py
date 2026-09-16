@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Authenticated local-network phone portal for speed-limit settings.
-
-The portal intentionally has no command endpoint, no CORS headers, and no
-cookie authentication. Its bearer token must be supplied in an Authorization
-header, so cross-site requests cannot authenticate it.
-"""
+"""Local-network phone portal for speed-limit settings."""
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -14,7 +9,6 @@ import time
 from openpilot.common.params import Params
 import openpilot.cereal.messaging as messaging
 
-from openpilot.custom.speed_limit.portal_auth import authorized, ensure_token
 from openpilot.custom.speed_limit.portal_settings import apply_settings, read_settings
 
 PORT = 8080
@@ -22,9 +16,9 @@ ENABLED_PARAM = "SpeedLimitPortalEnabled"
 
 PAGE = """<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>
 <title>comma speed limit</title><style>body{font:18px system-ui;margin:auto;max-width:34rem;padding:1rem}input,button{font:inherit;padding:.5rem;margin:.25rem 0;width:100%}label{display:block;margin-top:.75rem}pre{white-space:pre-wrap;background:#eee;padding:.75rem}</style>
-<h1>Speed limit</h1><label>Portal token<input id=token type=password autocomplete=off></label><button onclick='load()'>Connect</button><pre id=status>Not connected</pre>
+<h1>Speed limit</h1><button onclick='load()'>Refresh</button><pre id=status>Not connected</pre>
 <label><input id=enabled type=checkbox> Enable Toyota RSA controller</label><label><input id=lower type=checkbox> Automatically accept lower limits</label><label><input id=higher type=checkbox> Automatically accept higher limits</label><label>Offset (mph)<input id=offset type=number step=.1></label><label>Absolute maximum (mph; blank disables)<input id=max type=number step=.1></label><button onclick='save()'>Save while offroad</button>
-<script>const $=id=>document.getElementById(id),MPS_TO_MPH=2.236936;async function api(path,options={}){options.headers={Authorization:'Bearer '+$('token').value,...(options.headers||{})};let r=await fetch(path,options);let j=await r.json();if(!r.ok)throw Error(j.error);return j}async function load(){try{let j=await api('/api/status');$('status').textContent=JSON.stringify(j,null,2);$('enabled').checked=j.settings.enabled;$('lower').checked=j.settings.auto_accept_lower;$('higher').checked=j.settings.auto_accept_higher;$('offset').value=(j.settings.offset_mps*MPS_TO_MPH).toFixed(1);$('max').value=j.settings.absolute_max_mps===null?'':(j.settings.absolute_max_mps*MPS_TO_MPH).toFixed(1)}catch(e){$('status').textContent=e}}async function save(){try{let v=$('max').value;let j=await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:$('enabled').checked,auto_accept_lower:$('lower').checked,auto_accept_higher:$('higher').checked,offset_mps:Number($('offset').value)/MPS_TO_MPH,absolute_max_mps:v===''?null:Number(v)/MPS_TO_MPH})});$('status').textContent=JSON.stringify(j,null,2)}catch(e){$('status').textContent=e}}</script>"""
+<script>const $=id=>document.getElementById(id),MPS_TO_MPH=2.236936;async function api(path,options={}){let r=await fetch(path,options);let j=await r.json();if(!r.ok)throw Error(j.error);return j}async function load(){try{let j=await api('/api/status');$('status').textContent=JSON.stringify(j,null,2);$('enabled').checked=j.settings.enabled;$('lower').checked=j.settings.auto_accept_lower;$('higher').checked=j.settings.auto_accept_higher;$('offset').value=(j.settings.offset_mps*MPS_TO_MPH).toFixed(1);$('max').value=j.settings.absolute_max_mps===null?'':(j.settings.absolute_max_mps*MPS_TO_MPH).toFixed(1)}catch(e){$('status').textContent=e}}async function save(){try{let v=$('max').value;let j=await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:$('enabled').checked,auto_accept_lower:$('lower').checked,auto_accept_higher:$('higher').checked,offset_mps:Number($('offset').value)/MPS_TO_MPH,absolute_max_mps:v===''?null:Number(v)/MPS_TO_MPH})});$('status').textContent=JSON.stringify(j,null,2)}catch(e){$('status').textContent=e}}</script>"""
 
 
 class RuntimeState:
@@ -50,7 +44,6 @@ class RuntimeState:
 class Portal:
   def __init__(self, params=None, runtime_state=None):
     self.params = Params() if params is None else params
-    self.token = ensure_token(self.params)
     self.runtime_state = RuntimeState() if runtime_state is None else runtime_state
 
   def status(self):
@@ -77,16 +70,10 @@ def handler_factory(portal):
       self.end_headers()
       self.wfile.write(data)
 
-    def _require_auth(self):
-      if authorized(self.headers.get("Authorization"), portal.token):
-        return True
-      self._send(HTTPStatus.UNAUTHORIZED, {"error": "authentication required"})
-      return False
-
     def do_GET(self):
       if self.path == "/":
         self._send(HTTPStatus.OK, PAGE, "text/html; charset=utf-8")
-      elif self.path == "/api/status" and self._require_auth():
+      elif self.path == "/api/status":
         self._send(HTTPStatus.OK, portal.status())
       else:
         self._send(HTTPStatus.NOT_FOUND, {"error": "not found"})
@@ -94,8 +81,6 @@ def handler_factory(portal):
     def do_PUT(self):
       if self.path != "/api/settings":
         self._send(HTTPStatus.NOT_FOUND, {"error": "not found"})
-        return
-      if not self._require_auth():
         return
       try:
         size = int(self.headers.get("Content-Length", "0"))

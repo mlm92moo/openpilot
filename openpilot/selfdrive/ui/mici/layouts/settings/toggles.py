@@ -8,7 +8,6 @@ from openpilot.selfdrive.ui.mici.widgets.dialog import BigConfirmationCircleButt
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.layouts.settings.common import restart_needed_callback
 from openpilot.selfdrive.ui.ui_state import ui_state
-from openpilot.custom.speed_limit.portal_auth import ensure_token
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
 
@@ -47,7 +46,6 @@ class TogglesLayoutMici(NavScroller):
                                        toggle_callback=self._on_experimental_mode)
     self._speed_limit_control = BigParamControl("Toyota RSA speed limit control", "SpeedLimitControlEnabled")
     self._portal_enabled = BigParamControl("enable local phone portal", "SpeedLimitPortalEnabled")
-    self._portal_token = BigButton("phone portal token", ensure_token(ui_state.params))
     is_metric_toggle = BigParamControl("use metric units", "IsMetric")
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM")
@@ -60,7 +58,6 @@ class TogglesLayoutMici(NavScroller):
       self._experimental_btn,
       self._speed_limit_control,
       self._portal_enabled,
-      self._portal_token,
       is_metric_toggle,
       ldw_toggle,
       always_on_dm_toggle,
