@@ -15,6 +15,7 @@ import openpilot.cereal.messaging as messaging
 from openpilot.custom.rsa_observer.core import Config as ObserverConfig, Observer
 from openpilot.custom.rsa_observer.inputs import cereal_event
 from openpilot.custom.speed_limit import Config, Runtime
+from openpilot.custom.speed_limit.controller import POSTED_SPEEDS_MPH
 from openpilot.custom.speed_limit.state import service_fields
 
 
@@ -29,12 +30,16 @@ def config_from_params(params):
     absolute = _number(params, "SpeedLimitAbsoluteMaxMps")
     if absolute is not None and absolute <= 0:
       absolute = None
+    # Retain an older generic setting as the default only until each new
+    # sign-specific setting has been saved through the portal.
+    legacy_offset = _number(params, "SpeedLimitControlOffsetMps", 0.0)
+    sign_offsets = tuple(_number(params, f"SpeedLimitControlOffset{mph}Mps", legacy_offset) for mph in POSTED_SPEEDS_MPH)
     return Config(
       enabled=params.get_bool("SpeedLimitControlEnabled"),
-      offset_mps=_number(params, "SpeedLimitControlOffsetMps", 0.0),
       auto_accept_lower=params.get_bool("SpeedLimitAutoAcceptLower"),
       auto_accept_higher=params.get_bool("SpeedLimitAutoAcceptHigher"),
       absolute_max_mps=absolute,
+      sign_offsets_mps=sign_offsets,
     )
   except (TypeError, ValueError):
     return Config()

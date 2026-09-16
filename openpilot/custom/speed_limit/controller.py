@@ -16,6 +16,11 @@ class Action(StrEnum):
   RELEASE = "release"
 
 
+POSTED_SPEEDS_MPH = (20, 25, 30, 40, 50, 60, 70, 75)
+MPS_PER_MPH = 0.44704
+DEFAULT_SIGN_OFFSETS_MPS = (0.0,) * len(POSTED_SPEEDS_MPH)
+
+
 def finite_positive(name, value):
   if type(value) not in (int, float) or not math.isfinite(value) or value <= 0:
     raise ValueError(f"{name} must be a finite positive number")
@@ -26,18 +31,28 @@ def finite_positive(name, value):
 class Config:
   """Already validated immutable configuration read outside the planner loop."""
   enabled: bool = False
-  offset_mps: float = 0.0
   auto_accept_lower: bool = False
   auto_accept_higher: bool = False
   absolute_max_mps: float | None = None
+  sign_offsets_mps: tuple[float, ...] = DEFAULT_SIGN_OFFSETS_MPS
 
   def __post_init__(self):
     if type(self.enabled) is not bool or type(self.auto_accept_lower) is not bool or type(self.auto_accept_higher) is not bool:
       raise ValueError("boolean configuration expected")
-    if type(self.offset_mps) not in (int, float) or not math.isfinite(self.offset_mps):
-      raise ValueError("offset_mps must be finite")
     if self.absolute_max_mps is not None:
       finite_positive("absolute_max_mps", self.absolute_max_mps)
+    if type(self.sign_offsets_mps) is not tuple or len(self.sign_offsets_mps) != len(POSTED_SPEEDS_MPH):
+      raise ValueError("one finite offset is required for every supported posted speed")
+    for offset in self.sign_offsets_mps:
+      if type(offset) not in (int, float) or not math.isfinite(offset):
+        raise ValueError("sign offsets must be finite")
+
+  def offset_for_limit_mps(self, limit_mps):
+    """Return a configured offset only for an exact supported posted sign."""
+    mph = round(limit_mps / MPS_PER_MPH)
+    if mph not in POSTED_SPEEDS_MPH or abs(limit_mps - mph * MPS_PER_MPH) > MPS_PER_MPH / 4:
+      return 0.0
+    return self.sign_offsets_mps[POSTED_SPEEDS_MPH.index(mph)]
 
 
 @dataclass(frozen=True)
@@ -163,7 +178,7 @@ class Controller:
       self.last_source_revision = None
 
     if config.enabled and self.accepted_limit_mps is not None and accelerator_override_speed_mps is not None and not clear_manual_override:
-      base_cap = finite_positive("accepted offset cap", self.accepted_limit_mps + config.offset_mps)
+      base_cap = finite_positive("accepted offset cap", self.accepted_limit_mps + config.offset_for_limit_mps(self.accepted_limit_mps))
       self.manual_override_cap_mps = max(base_cap, self.manual_override_cap_mps or base_cap, float(accelerator_override_speed_mps))
 
     caps = [float(driver_cruise_mps)]
@@ -173,7 +188,7 @@ class Controller:
     road_cap = None
     if config.enabled and self.accepted_limit_mps is not None:
       # The source may be stale, but the retained cap is visibly distinct.
-      road_cap = finite_positive("accepted offset cap", self.accepted_limit_mps + config.offset_mps)
+      road_cap = finite_positive("accepted offset cap", self.accepted_limit_mps + config.offset_for_limit_mps(self.accepted_limit_mps))
       if self.manual_override_cap_mps is not None:
         road_cap = max(road_cap, self.manual_override_cap_mps)
       caps.append(road_cap)

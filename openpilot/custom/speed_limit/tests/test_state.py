@@ -22,7 +22,7 @@ class StateTests(unittest.TestCase):
       service_fields({"enabled": True})
 
   def test_runtime_output_maps_to_active_restriction(self):
-    result = Runtime().update(Config(True, 0, True, True), {
+    result = Runtime().update(Config(True, True, True), {
       "rsa1_fresh": True, "persistent_primary_mps": 25.0, "state": "numeric_observation",
     }, 30.0)
     fields = service_fields(result)
