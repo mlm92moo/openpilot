@@ -16,9 +16,15 @@ ENABLED_PARAM = "SpeedLimitPortalEnabled"
 
 PAGE = """<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>
 <title>comma speed limit</title><style>body{font:18px system-ui;margin:auto;max-width:34rem;padding:1rem}input,button{font:inherit;padding:.5rem;margin:.25rem 0;width:100%}label{display:block;margin-top:.75rem}pre{white-space:pre-wrap;background:#eee;padding:.75rem}</style>
-<h1>Speed limit</h1><button onclick='load()'>Refresh</button><pre id=status>Not connected</pre>
-<label><input id=enabled type=checkbox> Enable Toyota RSA controller</label><label><input id=lower type=checkbox> Automatically accept lower limits</label><label><input id=higher type=checkbox> Automatically accept higher limits</label><label>Offset (mph)<input id=offset type=number step=.1></label><label>Absolute maximum (mph; blank disables)<input id=max type=number step=.1></label><button onclick='save()'>Save while offroad</button>
-<script>const $=id=>document.getElementById(id),MPS_TO_MPH=2.236936;async function api(path,options={}){let r=await fetch(path,options);let j=await r.json();if(!r.ok)throw Error(j.error);return j}async function load(){try{let j=await api('/api/status');$('status').textContent=JSON.stringify(j,null,2);$('enabled').checked=j.settings.enabled;$('lower').checked=j.settings.auto_accept_lower;$('higher').checked=j.settings.auto_accept_higher;$('offset').value=(j.settings.offset_mps*MPS_TO_MPH).toFixed(1);$('max').value=j.settings.absolute_max_mps===null?'':(j.settings.absolute_max_mps*MPS_TO_MPH).toFixed(1)}catch(e){$('status').textContent=e}}async function save(){try{let v=$('max').value;let j=await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:$('enabled').checked,auto_accept_lower:$('lower').checked,auto_accept_higher:$('higher').checked,offset_mps:Number($('offset').value)/MPS_TO_MPH,absolute_max_mps:v===''?null:Number(v)/MPS_TO_MPH})});$('status').textContent=JSON.stringify(j,null,2)}catch(e){$('status').textContent=e}}</script>"""
+<h1>Speed limit</h1><button id=refresh>Refresh</button><pre id=status>Not connected</pre>
+<label><input id=enabled type=checkbox> Enable Toyota RSA controller</label><label><input id=lower type=checkbox> Automatically accept lower limits</label><label><input id=higher type=checkbox> Automatically accept higher limits</label><label>Offset (mph)<input id=offset type=number step=.1></label><label>Absolute maximum (mph; blank disables)<input id=max type=number step=.1></label><button id=save>Save while offroad</button>
+<script src=/portal.js></script>"""
+
+SCRIPT = """const $=id=>document.getElementById(id),MPS_TO_MPH=2.236936;
+async function api(path,options={}){let r=await fetch(path,options);let j=await r.json();if(!r.ok)throw Error(j.error);return j}
+async function load(){try{let j=await api('/api/status');$('status').textContent=JSON.stringify(j,null,2);$('enabled').checked=j.settings.enabled;$('lower').checked=j.settings.auto_accept_lower;$('higher').checked=j.settings.auto_accept_higher;$('offset').value=(j.settings.offset_mps*MPS_TO_MPH).toFixed(1);$('max').value=j.settings.absolute_max_mps===null?'':(j.settings.absolute_max_mps*MPS_TO_MPH).toFixed(1)}catch(e){$('status').textContent=e}}
+async function save(){try{let v=$('max').value;let j=await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:$('enabled').checked,auto_accept_lower:$('lower').checked,auto_accept_higher:$('higher').checked,offset_mps:Number($('offset').value)/MPS_TO_MPH,absolute_max_mps:v===''?null:Number(v)/MPS_TO_MPH})});$('status').textContent=JSON.stringify(j,null,2)}catch(e){$('status').textContent=e}}
+$('refresh').addEventListener('click', load);$('save').addEventListener('click', save);"""
 
 
 class RuntimeState:
@@ -73,6 +79,8 @@ def handler_factory(portal):
     def do_GET(self):
       if self.path == "/":
         self._send(HTTPStatus.OK, PAGE, "text/html; charset=utf-8")
+      elif self.path == "/portal.js":
+        self._send(HTTPStatus.OK, SCRIPT, "application/javascript; charset=utf-8")
       elif self.path == "/api/status":
         self._send(HTTPStatus.OK, portal.status())
       else:
