@@ -48,6 +48,14 @@ always_true = [True] * int(TEST_TIMESPAN / DT_DMON)
 always_false = [False] * int(TEST_TIMESPAN / DT_DMON)
 
 class TestMonitoring(OpenpilotTestCase):
+  def test_custom_warning_and_no_response_timers(self):
+    settings = DRIVER_MONITOR_SETTINGS()
+    self.assertEqual((settings._VISION_POLICY_ALERT_1_TIMEOUT, settings._VISION_POLICY_ALERT_2_TIMEOUT,
+                      settings._VISION_POLICY_ALERT_3_TIMEOUT), (15., 24., 39.))
+    self.assertEqual((settings._WHEELTOUCH_POLICY_ALERT_1_TIMEOUT, settings._WHEELTOUCH_POLICY_ALERT_2_TIMEOUT,
+                      settings._WHEELTOUCH_POLICY_ALERT_3_TIMEOUT), (15., 45., 75.))
+    self.assertEqual(settings._NO_RESPONSE_TIMEOUT, 15.)
+
   def _run_seq(self, msgs, interaction, engaged, lowspeed):
     DM = DriverMonitoring()
     alert_lvls = []
