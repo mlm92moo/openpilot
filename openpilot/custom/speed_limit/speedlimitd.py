@@ -54,17 +54,25 @@ def main():
   runtime = Runtime()
   can_sock = messaging.sub_sock("can", conflate=False)
   car_state_sock = messaging.sub_sock("carState", conflate=True)
+  selfdrive_state_sock = messaging.sub_sock("selfdriveState", conflate=True)
   pm = messaging.PubMaster(["speedLimitState"])
   rk = Ratekeeper(10, print_delay_threshold=None)
   driver_cruise_mps = None
   accelerator_override_speed_mps = None
+  brake_pressed = False
+  openpilot_engaged = False
 
   while True:
+    selfdrive_state = messaging.recv_one_or_none(selfdrive_state_sock)
+    if selfdrive_state is not None and selfdrive_state.which() == "selfdriveState" and selfdrive_state.valid:
+      openpilot_engaged = bool(selfdrive_state.selfdriveState.enabled)
+
     car_state = messaging.recv_one_or_none(car_state_sock)
     if car_state is not None and car_state.which() == "carState" and car_state.valid:
       driver_cruise_mps = car_state.carState.vCruise * CV.KPH_TO_MS
       v_ego = car_state.carState.vEgo
-      accelerator_override_speed_mps = v_ego if car_state.carState.gasPressed and v_ego > 0 else None
+      brake_pressed = bool(car_state.carState.brakePressed)
+      accelerator_override_speed_mps = v_ego if openpilot_engaged and car_state.carState.gasPressed and v_ego > 0 else None
 
     raw_can = messaging.drain_sock(can_sock)
     now_ns = time.monotonic_ns()
@@ -81,7 +89,8 @@ def main():
                 "accepted_limit_mps": None, "effective_cap_mps": 0.0}
     else:
       result = runtime.update(config_from_params(params), status, driver_cruise_mps,
-                              accelerator_override_speed_mps=accelerator_override_speed_mps)
+                              accelerator_override_speed_mps=accelerator_override_speed_mps,
+                              clear_manual_override=brake_pressed or not openpilot_engaged)
     publish(pm, service_fields(result), can_valid)
     rk.keep_time()
 

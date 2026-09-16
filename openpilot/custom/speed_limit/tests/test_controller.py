@@ -72,6 +72,18 @@ class ControllerTests(unittest.TestCase):
     self.assertAlmostEqual(result["manual_override_cap_mps"], 70 * MPH)
     self.assertAlmostEqual(result["effective_cap_mps"], 65 * MPH)
 
+  def test_brake_or_disengagement_clears_only_accelerator_override(self):
+    config = Config(True, 2 * MPH, True, True)
+    self.update(config, source(1, 55))
+    self.controller.update(config, source(1, 55), self.driver, accelerator_override_speed_mps=68 * MPH)
+    braked = self.controller.update(config, source(1, 55), self.driver, clear_manual_override=True)
+    self.assertIsNone(braked["manual_override_cap_mps"])
+    self.assertAlmostEqual(braked["effective_cap_mps"], 57 * MPH)
+    self.controller.update(config, source(1, 55), self.driver, accelerator_override_speed_mps=66 * MPH)
+    disengaged = self.controller.update(config, source(1, 55), self.driver, clear_manual_override=True)
+    self.assertIsNone(disengaged["manual_override_cap_mps"])
+    self.assertAlmostEqual(disengaged["effective_cap_mps"], 57 * MPH)
+
   def test_disabled_has_no_road_limit_and_absolute_cap_is_separate(self):
     disabled = self.update(Config(), source())
     self.assertEqual(disabled["effective_cap_mps"], self.driver)

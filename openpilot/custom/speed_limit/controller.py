@@ -121,7 +121,8 @@ class Controller:
       self.pending_revision = source.revision
       self.pending_limit_mps = float(source.limit_mps)
 
-  def update(self, config, source, driver_cruise_mps, action=Action.NONE, accelerator_override_speed_mps=None):
+  def update(self, config, source, driver_cruise_mps, action=Action.NONE, accelerator_override_speed_mps=None,
+             clear_manual_override=False):
     """Return serializable policy state for exactly one planner cycle.
 
     `driver_cruise_mps` is never stored or modified. A caller with stock cruise
@@ -132,6 +133,8 @@ class Controller:
     finite_positive("driver_cruise_mps", driver_cruise_mps)
     if accelerator_override_speed_mps is not None:
       finite_positive("accelerator_override_speed_mps", accelerator_override_speed_mps)
+    if type(clear_manual_override) is not bool:
+      raise ValueError("clear_manual_override must be boolean")
     try:
       action = Action(action)
     except ValueError as exc:
@@ -140,6 +143,10 @@ class Controller:
     if action == Action.RELEASE:
       self.clear_road_limit()
       self.last_source_revision = source.revision
+    if clear_manual_override:
+      # Braking or disengaging cancels only the temporary pedal override. The
+      # accepted RSA limit remains the active cap.
+      self.manual_override_cap_mps = None
     if source.fresh and source.limit_mps is not None:
       if self.last_fresh_limit_mps is not None and source.limit_mps != self.last_fresh_limit_mps:
         # A new posted limit ends a manual accelerator override. The new sign
@@ -155,7 +162,7 @@ class Controller:
       # source revision did not change while the feature was disabled.
       self.last_source_revision = None
 
-    if config.enabled and self.accepted_limit_mps is not None and accelerator_override_speed_mps is not None:
+    if config.enabled and self.accepted_limit_mps is not None and accelerator_override_speed_mps is not None and not clear_manual_override:
       base_cap = finite_positive("accepted offset cap", self.accepted_limit_mps + config.offset_mps)
       self.manual_override_cap_mps = max(base_cap, self.manual_override_cap_mps or base_cap, float(accelerator_override_speed_mps))
 
