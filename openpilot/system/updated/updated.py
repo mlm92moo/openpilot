@@ -259,9 +259,15 @@ class Updater:
   @property
   def update_available(self) -> bool:
     if os.path.isdir(OVERLAY_MERGED) and len(self.branches) > 0:
-      hash_mismatch = self.get_commit_hash(OVERLAY_MERGED) != self.branches[self.target_branch]
-      branch_mismatch = self.get_branch(OVERLAY_MERGED) != self.target_branch
-      return hash_mismatch or branch_mismatch
+      target_commit = self.branches[self.target_branch]
+      staging_mismatch = (self.get_commit_hash(OVERLAY_MERGED) != target_commit or
+                          self.get_branch(OVERLAY_MERGED) != self.target_branch)
+      # A prior interrupted download can leave staging at the target commit
+      # without a finalized update. In that state the installed checkout still
+      # needs a fetch/finalize pass, even though staging itself is current.
+      installed_mismatch = (self.get_commit_hash(BASEDIR) != target_commit or
+                            self.get_branch(BASEDIR) != self.target_branch)
+      return staging_mismatch or installed_mismatch
     return False
 
   def get_branch(self, path: str) -> str:
