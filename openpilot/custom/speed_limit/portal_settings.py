@@ -1,4 +1,4 @@
-"""Whitelisted, offroad-only settings for the local phone portal."""
+"""Whitelisted settings for the local phone portal."""
 import math
 
 
@@ -29,9 +29,7 @@ def read_settings(params):
   }
 
 
-def apply_settings(params, payload, is_offroad):
-  if is_offroad is not True:
-    raise PermissionError("speed-limit settings can only change while offroad")
+def apply_settings(params, payload, _is_offroad=None):
   if type(payload) is not dict or not payload or set(payload) - set(SPEED_LIMIT_SETTINGS):
     raise ValueError("unknown or empty settings payload")
   for name, value in payload.items():

@@ -67,15 +67,19 @@ class Controller:
   def __init__(self):
     self.accepted_revision = None
     self.accepted_limit_mps = None
+    self.manual_override_cap_mps = None
     self.pending_revision = None
     self.pending_limit_mps = None
     self.last_source_revision = None
+    self.last_fresh_limit_mps = None
 
   def clear_road_limit(self):
     self.accepted_revision = None
     self.accepted_limit_mps = None
+    self.manual_override_cap_mps = None
     self.pending_revision = None
     self.pending_limit_mps = None
+    self.last_fresh_limit_mps = None
 
   def _accept(self, source):
     self.accepted_revision = source.revision
@@ -117,7 +121,7 @@ class Controller:
       self.pending_revision = source.revision
       self.pending_limit_mps = float(source.limit_mps)
 
-  def update(self, config, source, driver_cruise_mps, action=Action.NONE):
+  def update(self, config, source, driver_cruise_mps, action=Action.NONE, accelerator_override_speed_mps=None):
     """Return serializable policy state for exactly one planner cycle.
 
     `driver_cruise_mps` is never stored or modified. A caller with stock cruise
@@ -126,6 +130,8 @@ class Controller:
     if not isinstance(config, Config) or not isinstance(source, SourceState):
       raise ValueError("typed configuration and source required")
     finite_positive("driver_cruise_mps", driver_cruise_mps)
+    if accelerator_override_speed_mps is not None:
+      finite_positive("accelerator_override_speed_mps", accelerator_override_speed_mps)
     try:
       action = Action(action)
     except ValueError as exc:
@@ -134,6 +140,12 @@ class Controller:
     if action == Action.RELEASE:
       self.clear_road_limit()
       self.last_source_revision = source.revision
+    if source.fresh and source.limit_mps is not None:
+      if self.last_fresh_limit_mps is not None and source.limit_mps != self.last_fresh_limit_mps:
+        # A new posted limit ends a manual accelerator override. The new sign
+        # still goes through the configured automatic-acceptance policy.
+        self.manual_override_cap_mps = None
+      self.last_fresh_limit_mps = source.limit_mps
     if config.enabled:
       self._consider_source(config, source, action, driver_cruise_mps)
     else:
@@ -143,6 +155,10 @@ class Controller:
       # source revision did not change while the feature was disabled.
       self.last_source_revision = None
 
+    if config.enabled and self.accepted_limit_mps is not None and accelerator_override_speed_mps is not None:
+      base_cap = finite_positive("accepted offset cap", self.accepted_limit_mps + config.offset_mps)
+      self.manual_override_cap_mps = max(base_cap, self.manual_override_cap_mps or base_cap, float(accelerator_override_speed_mps))
+
     caps = [float(driver_cruise_mps)]
     if config.absolute_max_mps is not None:
       caps.append(float(config.absolute_max_mps))
@@ -151,6 +167,8 @@ class Controller:
     if config.enabled and self.accepted_limit_mps is not None:
       # The source may be stale, but the retained cap is visibly distinct.
       road_cap = finite_positive("accepted offset cap", self.accepted_limit_mps + config.offset_mps)
+      if self.manual_override_cap_mps is not None:
+        road_cap = max(road_cap, self.manual_override_cap_mps)
       caps.append(road_cap)
       source_state = "accepted" if source.fresh and source.limit_mps is not None else "stale_restriction"
     elif config.enabled and self.pending_limit_mps is not None:
@@ -166,6 +184,7 @@ class Controller:
       "effective_cap_mps": effective,
       "road_cap_mps": road_cap,
       "absolute_cap_mps": config.absolute_max_mps,
+      "manual_override_cap_mps": self.manual_override_cap_mps,
       "source_state": source_state,
       "source_reason": source.reason,
       "source_fresh": source.fresh,

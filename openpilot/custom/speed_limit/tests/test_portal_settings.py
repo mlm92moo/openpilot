@@ -24,12 +24,11 @@ class FakeParams:
 
 
 class PortalSettingsTests(unittest.TestCase):
-  def test_whitelist_and_offroad_gate(self):
+  def test_whitelist_allows_onroad_update(self):
     params = FakeParams()
-    with self.assertRaises(PermissionError):
-      apply_settings(params, {"enabled": True}, False)
     with self.assertRaises(ValueError):
       apply_settings(params, {"arbitrary": 1}, True)
+    self.assertTrue(apply_settings(params, {"enabled": True}, False)["enabled"])
 
   def test_valid_update_and_clear_maximum(self):
     params = FakeParams()

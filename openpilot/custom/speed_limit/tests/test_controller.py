@@ -53,6 +53,25 @@ class ControllerTests(unittest.TestCase):
     released = self.update(config, source(1, 55, False, "stale"), Action.RELEASE)
     self.assertEqual(released["effective_cap_mps"], self.driver)
 
+  def test_accelerator_override_holds_until_a_different_limit(self):
+    config = Config(True, 0, True, True)
+    self.update(config, source(1, 55))
+    override = self.controller.update(config, source(1, 55), self.driver, accelerator_override_speed_mps=68 * MPH)
+    self.assertAlmostEqual(override["effective_cap_mps"], 68 * MPH)
+    self.assertAlmostEqual(override["manual_override_cap_mps"], 68 * MPH)
+    held = self.update(config, source(1, 55))
+    self.assertAlmostEqual(held["effective_cap_mps"], 68 * MPH)
+    changed = self.update(config, source(2, 60))
+    self.assertIsNone(changed["manual_override_cap_mps"])
+    self.assertAlmostEqual(changed["effective_cap_mps"], 60 * MPH)
+
+  def test_accelerator_override_respects_driver_and_absolute_caps(self):
+    config = Config(True, 0, True, True, 65 * MPH)
+    self.update(config, source(1, 55))
+    result = self.controller.update(config, source(1, 55), self.driver, accelerator_override_speed_mps=70 * MPH)
+    self.assertAlmostEqual(result["manual_override_cap_mps"], 70 * MPH)
+    self.assertAlmostEqual(result["effective_cap_mps"], 65 * MPH)
+
   def test_disabled_has_no_road_limit_and_absolute_cap_is_separate(self):
     disabled = self.update(Config(), source())
     self.assertEqual(disabled["effective_cap_mps"], self.driver)

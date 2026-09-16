@@ -17,7 +17,7 @@ ENABLED_PARAM = "SpeedLimitPortalEnabled"
 PAGE = """<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'>
 <title>comma speed limit</title><style>body{font:18px system-ui;margin:auto;max-width:34rem;padding:1rem}input,button{font:inherit;padding:.5rem;margin:.25rem 0;width:100%}label{display:block;margin-top:.75rem}pre{white-space:pre-wrap;background:#eee;padding:.75rem}</style>
 <h1>Speed limit</h1><button id=refresh>Refresh</button><pre id=status>Not connected</pre>
-<label><input id=enabled type=checkbox> Enable Toyota RSA controller</label><label><input id=lower type=checkbox> Automatically accept lower limits</label><label><input id=higher type=checkbox> Automatically accept higher limits</label><label>Offset (mph)<input id=offset type=number step=.1></label><label>Absolute maximum (mph; blank disables)<input id=max type=number step=.1></label><button id=save>Save while offroad</button>
+<label><input id=enabled type=checkbox> Enable Toyota RSA controller</label><label><input id=lower type=checkbox> Automatically accept lower limits</label><label><input id=higher type=checkbox> Automatically accept higher limits</label><label>Offset (mph)<input id=offset type=number step=.1></label><label>Absolute maximum (mph; blank disables)<input id=max type=number step=.1></label><button id=save>Save settings</button>
 <script src=/portal.js></script>"""
 
 SCRIPT = """const $=id=>document.getElementById(id),MPS_TO_MPH=2.236936;
