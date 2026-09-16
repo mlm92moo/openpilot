@@ -40,3 +40,20 @@ class PortalSettingsTests(unittest.TestCase):
     self.assertEqual(result["offset_mps"], 2.2352)
     self.assertEqual(result["absolute_max_mps"], 30.0)
     self.assertIsNone(apply_settings(params, {"absolute_max_mps": None}, True)["absolute_max_mps"])
+
+  def test_device_controls_are_whitelisted(self):
+    params = FakeParams()
+    result = apply_settings(params, {
+      "always_on_driver_monitoring": True,
+      "lane_departure_warnings": True,
+      "disengage_on_accelerator": True,
+      "local_phone_portal": True,
+      "driving_personality": "relaxed",
+    })
+    self.assertTrue(result["always_on_driver_monitoring"])
+    self.assertTrue(result["lane_departure_warnings"])
+    self.assertTrue(result["disengage_on_accelerator"])
+    self.assertTrue(result["local_phone_portal"])
+    self.assertEqual(result["driving_personality"], "relaxed")
+    with self.assertRaises(ValueError):
+      apply_settings(params, {"driving_personality": "fast"})
