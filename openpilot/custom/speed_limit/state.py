@@ -14,7 +14,8 @@ def service_fields(result):
   """Return only fields represented in `SpeedLimitState`.
 
   Cap'n Proto scalar fields have no `None`, so each optional speed has a
-  companion `has...` flag. This boundary keeps that conversion out of policy.
+  companion `has...` flag. `controlEligible` is diagnostic only; the active
+  cap and its restriction flag are the planner contract.
   """
   required = {"enabled", "restriction_active", "control_eligible", "source_state", "source_revision",
               "detected_limit_mps", "accepted_limit_mps", "effective_cap_mps"}

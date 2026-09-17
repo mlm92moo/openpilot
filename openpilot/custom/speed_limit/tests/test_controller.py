@@ -106,6 +106,18 @@ class ControllerTests(unittest.TestCase):
     with self.assertRaises(ValueError):
       self.controller.update(Config(), source(), 0)
 
+  def test_acceptance_change_reconsiders_the_current_pending_sign(self):
+    sign = source(1, 80)
+    pending = self.update(policy(higher=False), sign)
+    self.assertEqual(pending["source_state"], "pending_acceptance")
+    accepted = self.update(policy(higher=True), sign)
+    self.assertEqual(accepted["source_state"], "accepted")
+    self.assertAlmostEqual(accepted["effective_cap_mps"], self.driver)
+
+  def test_non_mph_sign_value_does_not_receive_an_nearby_offset(self):
+    config = policy(offsets={25: 5})
+    self.assertEqual(config.offset_for_limit_mps(40 / 3.6), 0.0)
+
   def test_runtime_uses_only_persistent_fresh_observer_values(self):
     runtime = Runtime()
     config = policy(offsets={50: 5})

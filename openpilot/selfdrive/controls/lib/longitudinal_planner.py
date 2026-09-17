@@ -13,7 +13,7 @@ from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import Longi
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan, should_stop
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
-from openpilot.custom.speed_limit.planner import cap_cruise
+from openpilot.custom.speed_limit.planner import retained_cap
 from openpilot.common.swaglog import cloudlog
 
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
@@ -68,6 +68,11 @@ class LongitudinalPlanner:
     self.a_cruise = 0.0
     self.output_a_target = 0.0
     self.output_should_stop = False
+    # The speed-limit publisher may stop or restart while driving. Preserve a
+    # valid accepted cap on a missing/invalid update so a process fault cannot
+    # cause an unexpected acceleration. A valid disabled message is the
+    # explicit release path and clears the retained cap.
+    self.speed_limit_cap_mps = None
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -82,7 +87,10 @@ class LongitudinalPlanner:
     v_ego = sm['carState'].vEgo
     v_cruise_kph = min(sm['carState'].vCruise, V_CRUISE_MAX)
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
-    v_cruise = cap_cruise(v_cruise, sm['speedLimitState'])
+    if sm.updated['speedLimitState'] and sm.valid['speedLimitState']:
+      self.speed_limit_cap_mps = retained_cap(self.speed_limit_cap_mps, sm['speedLimitState'], True, True)
+    if self.speed_limit_cap_mps is not None:
+      v_cruise = min(v_cruise, self.speed_limit_cap_mps)
     if sm['controlsState'].forceDecel:
       v_cruise = 0.0
 

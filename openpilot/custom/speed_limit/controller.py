@@ -40,17 +40,18 @@ class Config:
     if type(self.enabled) is not bool or type(self.auto_accept_lower) is not bool or type(self.auto_accept_higher) is not bool:
       raise ValueError("boolean configuration expected")
     if self.absolute_max_mps is not None:
-      finite_positive("absolute_max_mps", self.absolute_max_mps)
+      if not 5.0 <= finite_positive("absolute_max_mps", self.absolute_max_mps) <= 55.0:
+        raise ValueError("absolute maximum must be from 5 to 55 m/s")
     if type(self.sign_offsets_mps) is not tuple or len(self.sign_offsets_mps) != len(POSTED_SPEEDS_MPH):
       raise ValueError("one finite offset is required for every supported posted speed")
     for offset in self.sign_offsets_mps:
-      if type(offset) not in (int, float) or not math.isfinite(offset):
-        raise ValueError("sign offsets must be finite")
+      if type(offset) not in (int, float) or not math.isfinite(offset) or not -8.0 <= offset <= 12.0:
+        raise ValueError("sign offsets must be finite and from -8 to 12 m/s")
 
   def offset_for_limit_mps(self, limit_mps):
     """Return a configured offset only for an exact supported posted sign."""
     mph = round(limit_mps / MPS_PER_MPH)
-    if mph not in POSTED_SPEEDS_MPH or abs(limit_mps - mph * MPS_PER_MPH) > MPS_PER_MPH / 4:
+    if mph not in POSTED_SPEEDS_MPH or not math.isclose(limit_mps, mph * MPS_PER_MPH, abs_tol=1e-5):
       return 0.0
     return self.sign_offsets_mps[POSTED_SPEEDS_MPH.index(mph)]
 
@@ -87,6 +88,7 @@ class Controller:
     self.pending_limit_mps = None
     self.last_source_revision = None
     self.last_fresh_limit_mps = None
+    self.last_acceptance_config = None
 
   def clear_road_limit(self):
     self.accepted_revision = None
@@ -107,10 +109,12 @@ class Controller:
       # A source disappearing does not implicitly release a previously accepted
       # restriction. A new numeric candidate must be fresh to be considered.
       return
-    is_new = source.revision != self.last_source_revision
+    acceptance_config = (config.auto_accept_lower, config.auto_accept_higher)
+    is_new = source.revision != self.last_source_revision or acceptance_config != self.last_acceptance_config
     if not is_new and action != Action.ACCEPT:
       return
     self.last_source_revision = source.revision
+    self.last_acceptance_config = acceptance_config
     if action == Action.ACCEPT:
       self._accept(source)
       return

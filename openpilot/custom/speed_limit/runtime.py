@@ -1,7 +1,7 @@
 """Bridge a validated source state to the isolated speed-limit policy.
 
-This module intentionally has no messaging or planner imports. A future process
-will own I/O and publish this output through a typed service.
+This module has no messaging or planner imports. speedlimitd owns I/O and
+publishes the output for the planner and portal.
 """
 from .controller import Config, Controller, SourceState
 

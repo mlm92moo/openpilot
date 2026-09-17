@@ -90,7 +90,7 @@ class CheckUpdateButton(BigButton):
       self.set_enabled(True)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    if ui_state.engaged:
+    if ui_state.engaged or not ui_state.is_offroad():
       return
     super()._handle_mouse_release(mouse_pos)
 
@@ -121,7 +121,7 @@ class CheckUpdateButton(BigButton):
   def _update_state(self):
     super()._update_state()
 
-    if ui_state.engaged:
+    if ui_state.engaged or not ui_state.is_offroad():
       self.set_enabled(False)
       return
 
@@ -190,8 +190,8 @@ class CheckUpdateButton(BigButton):
 class InstallUpdateButton(BigButton):
   def __init__(self):
     super().__init__("install update", "", gui_app.texture("icons_mici/settings/device/reboot.png", 64, 70))
-    self.set_visible(lambda: not ui_state.engaged and ui_state.params.get_bool("UpdateAvailable"))
-    self.set_enabled(lambda: not ui_state.engaged)
+    self.set_visible(lambda: ui_state.is_offroad() and not ui_state.engaged and ui_state.params.get_bool("UpdateAvailable"))
+    self.set_enabled(lambda: ui_state.is_offroad() and not ui_state.engaged)
 
   def _update_state(self):
     super()._update_state()
@@ -202,13 +202,13 @@ class InstallUpdateButton(BigButton):
       self.set_value(value)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    if ui_state.engaged:
+    if ui_state.engaged or not ui_state.is_offroad():
       return
     super()._handle_mouse_release(mouse_pos)
     self.set_enabled(False)
 
     def run():
-      if not ui_state.engaged:
+      if not ui_state.engaged and ui_state.is_offroad():
         ui_state.params.put_bool("DoReboot", True, block=True)
 
     threading.Thread(target=run, daemon=True).start()

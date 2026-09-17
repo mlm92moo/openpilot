@@ -167,6 +167,10 @@ def manager_thread() -> None:
     shutdown = False
     for param in ("DoUninstall", "DoShutdown", "DoReboot"):
       if params.get_bool(param):
+        if param in ("DoUninstall", "DoReboot") and started:
+          params.remove(param)
+          cloudlog.warning(f"ignored {param} while onroad")
+          continue
         shutdown = True
         params.put("LastManagerExitReason", f"{param} {datetime.datetime.now()}", block=True)
         cloudlog.warning(f"Shutting down manager - {param} set")

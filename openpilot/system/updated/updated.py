@@ -249,15 +249,21 @@ class Updater:
   @property
   def update_ready(self) -> bool:
     consistent_file = Path(os.path.join(FINALIZED, ".overlay_consistent"))
-    if consistent_file.is_file():
-      hash_mismatch = self.get_commit_hash(BASEDIR) != self.branches[self.target_branch]
+    if consistent_file.is_file() and self.target_branch in self.branches:
+      target_commit = self.branches[self.target_branch]
+      hash_mismatch = self.get_commit_hash(BASEDIR) != target_commit
       branch_mismatch = self.get_branch(BASEDIR) != self.target_branch
-      on_target_branch = self.get_branch(FINALIZED) == self.target_branch
-      return ((hash_mismatch or branch_mismatch) and on_target_branch)
+      finalized_matches_target = (self.get_branch(FINALIZED) == self.target_branch
+                                  and self.get_commit_hash(FINALIZED) == target_commit)
+      return (hash_mismatch or branch_mismatch) and finalized_matches_target
     return False
 
   @property
   def update_available(self) -> bool:
+    # A verified finalized update should only offer installation. Starting a
+    # second fetch would remove its consistency marker and repeat the work.
+    if self.update_ready:
+      return False
     if os.path.isdir(OVERLAY_MERGED) and len(self.branches) > 0:
       target_commit = self.branches[self.target_branch]
       staging_mismatch = (self.get_commit_hash(OVERLAY_MERGED) != target_commit or

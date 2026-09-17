@@ -9,10 +9,15 @@ import time
 from openpilot.common.params import Params
 import openpilot.cereal.messaging as messaging
 
-from openpilot.custom.speed_limit.portal_settings import apply_settings, read_settings
+from openpilot.custom.speed_limit.settings import apply_settings, read_settings, settings_revision
 
 PORT = 8080
 ENABLED_PARAM = "SpeedLimitPortalEnabled"
+
+
+class LocalPortalServer(ThreadingHTTPServer):
+  daemon_threads = True
+  request_queue_size = 8
 
 PAGE = """<!doctype html>
 <html lang=en><meta name=viewport content="width=device-width,initial-scale=1">
@@ -49,10 +54,10 @@ button{border:0;border-radius:.75rem;padding:.8rem 1rem;font:inherit;font-weight
 <button class=secondary id=refresh>Refresh status</button><button class=primary id=save>Save changes</button><p id=notice class=notice aria-live=polite></p>
 </main><script src=/portal.js></script></body></html>"""
 
-SCRIPT = """const $=id=>document.getElementById(id),MPS_TO_MPH=2.236936,SIGNS=[20,25,30,40,50,60,70,75];
+SCRIPT = """const $=id=>document.getElementById(id),MPS_TO_MPH=2.236936,SIGNS=[20,25,30,40,50,60,70,75];let loaded=false,revision='';
 const mph=value=>value===null||value===undefined?'—':Math.round(value*MPS_TO_MPH*10)/10+' mph';
 function notice(message,kind=''){let el=$('notice');el.textContent=message;el.className='notice '+kind}
-function status(data){let settings=data.settings||{},rsa=data.rsa||{},device=data.device||{};
+function status(data){let settings=data.settings||{},rsa=data.rsa||{},device=data.device||{};loaded=true;revision=data.settings_revision||'';
   $('dot').className='dot '+(rsa.available?'ok':'');$('connection').textContent=rsa.available?'Connected':'Not connected';
   $('detected').textContent=mph(rsa.detected_limit_mps);$('accepted').textContent=mph(rsa.accepted_limit_mps);$('cap').textContent=mph(rsa.effective_cap_mps);
   $('source').textContent=rsa.source_fresh?'Dashboard RSA sign is fresh.':rsa.source_state?'RSA source: '+rsa.source_state+'.':'Waiting for a dashboard RSA sign.';
@@ -64,12 +69,12 @@ function status(data){let settings=data.settings||{},rsa=data.rsa||{},device=dat
 }
 async function api(path,options={}){let response=await fetch(path,options),data=await response.json();if(!response.ok)throw Error(data.error||'Request failed');return data}
 async function load(){notice('');try{status(await api('/api/status'))}catch(error){notice(error.message,'error');$('connection').textContent='Unavailable'}}
-async function save(){try{let maximum=$('max').value,payload={
+async function save(){try{if(!loaded)throw Error('Load settings before saving.');let maximum=$('max').value,payload={
   enabled:$('enabled').checked,auto_accept_lower:$('lower').checked,auto_accept_higher:$('higher').checked,
   absolute_max_mps:maximum===''?null:Number(maximum)/MPS_TO_MPH,
   always_on_driver_monitoring:$('always-on-dm').checked,lane_departure_warnings:$('ldw').checked,
   disengage_on_accelerator:$('accelerator-disengage').checked,driving_personality:$('personality').value,
-  local_phone_portal:$('portal-enabled').checked};SIGNS.forEach(sign=>payload['offset_'+sign+'_mps']=Number($('offset-'+sign).value)/MPS_TO_MPH);let data=await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});status(data);notice('Saved to your comma.','ok')}catch(error){notice(error.message,'error')}}
+  local_phone_portal:$('portal-enabled').checked};SIGNS.forEach(sign=>payload['offset_'+sign+'_mps']=Number($('offset-'+sign).value)/MPS_TO_MPH);let data=await api('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({settings:payload,revision})});status(data);notice('Saved to your comma.','ok')}catch(error){notice(error.message,'error')}}
 $('refresh').addEventListener('click',load);$('save').addEventListener('click',save);load();"""
 
 
@@ -78,6 +83,7 @@ class RuntimeState:
     self._socket = messaging.sub_sock("speedLimitState", conflate=True)
     self._lock = threading.Lock()
     self._value = {"available": False}
+    self._updated_at = None
 
   def snapshot(self):
     with self._lock:
@@ -90,7 +96,14 @@ class RuntimeState:
             "accepted_limit_mps": state.acceptedLimitMps if state.hasAcceptedLimit else None,
             "effective_cap_mps": state.effectiveCapMps if state.restrictionActive else None,
           }
-      return dict(self._value)
+          self._updated_at = time.monotonic()
+      value = dict(self._value)
+      value["age_s"] = None if self._updated_at is None else time.monotonic() - self._updated_at
+      if value["age_s"] is None or value["age_s"] > 3.0:
+        value["available"] = False
+        value["source_fresh"] = False
+        value["source_state"] = "controller_unavailable"
+      return value
 
 
 class Portal:
@@ -99,18 +112,25 @@ class Portal:
     self.runtime_state = RuntimeState() if runtime_state is None else runtime_state
 
   def status(self):
-    return {"settings": read_settings(self.params), "rsa": self.runtime_state.snapshot(),
+    settings = read_settings(self.params)
+    return {"settings": settings, "settings_revision": settings_revision(settings), "rsa": self.runtime_state.snapshot(),
             "device": {"version": self.params.get("Version", return_default=True),
                        "branch": self.params.get("GitBranch", return_default=True),
                        "commit": self.params.get("GitCommit", return_default=True)}}
 
   def update_settings(self, payload):
-    apply_settings(self.params, payload, self.params.get_bool("IsOffroad"))
+    if type(payload) is not dict or set(payload) != {"settings", "revision"}:
+      raise ValueError("settings and revision are required")
+    apply_settings(self.params, payload["settings"], payload["revision"])
     return self.status()
 
 
 def handler_factory(portal):
   class Handler(BaseHTTPRequestHandler):
+    def setup(self):
+      super().setup()
+      self.connection.settimeout(5)
+
     def _send(self, status, payload, content_type="application/json"):
       data = payload.encode() if isinstance(payload, str) else json.dumps(payload, allow_nan=False).encode()
       self.send_response(status)
@@ -160,7 +180,7 @@ def main():
     enabled = params.get_bool(ENABLED_PARAM)
     if enabled and server is None:
       portal = Portal(params)
-      server = ThreadingHTTPServer(("0.0.0.0", PORT), handler_factory(portal))
+      server = LocalPortalServer(("0.0.0.0", PORT), handler_factory(portal))
       threading.Thread(target=server.serve_forever, daemon=True).start()
     elif not enabled and server is not None:
       server.shutdown()
