@@ -24,7 +24,16 @@ struct SpeedLimitState @0x81c2f05a394cf4af {
   restrictionActive @10 :Bool;
 }
 
-struct CustomReserved1 @0xaedffd8f31e7b55d {
+struct PersonalSpeedZoneState @0xaedffd8f31e7b55d {
+  enabled @0 :Bool;
+  restrictionActive @1 :Bool;
+  effectiveCapMps @2 :Float32;
+  hasTarget @3 :Bool;
+  targetMps @4 :Float32;
+  gpsFresh @5 :Bool;
+  sourceState @6 :Text;
+  zoneCount @7 :UInt16;
+  activeZoneCount @8 :UInt16;
 }
 
 struct CustomReserved2 @0xf35cc4560bbf6ec2 {

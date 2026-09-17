@@ -112,6 +112,7 @@ procs = [
   PythonProcess("ubloxd", "openpilot.system.ubloxd.ubloxd", ublox, enabled=COMMA_HARDWARE),
   PythonProcess("pigeond", "openpilot.system.ubloxd.pigeond", ublox, enabled=COMMA_HARDWARE),
   PythonProcess("speedlimitd", "openpilot.custom.speed_limit.speedlimitd", only_onroad),
+  PythonProcess("personal_speed_zonesd", "openpilot.custom.personal_speed_zones.personal_speed_zonesd", only_onroad),
   PythonProcess("speedlimitportald", "openpilot.custom.speed_limit.portal", always_run),
   PythonProcess("plannerd", "openpilot.selfdrive.controls.plannerd", not_long_maneuver),
   PythonProcess("maneuversd", "openpilot.tools.longitudinal_maneuvers.maneuversd", long_maneuver),

@@ -23,7 +23,7 @@ def main():
                             # A speed-limit process failure must not make the cruise target rise.
                             # LongitudinalPlanner retains the last valid active cap and exposes
                             # the publisher's freshness separately through the phone portal.
-                            'speedLimitState'], poll='modelV2', ignore_alive=['speedLimitState'],
+                            'speedLimitState', 'personalSpeedZoneState'], poll='modelV2', ignore_alive=['speedLimitState'],
                            ignore_avg_freq=['speedLimitState'], ignore_valid=['speedLimitState'])
 
   while True:

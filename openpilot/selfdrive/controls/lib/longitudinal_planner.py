@@ -14,6 +14,7 @@ from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDX
 from openpilot.selfdrive.controls.lib.drive_helpers import CONTROL_N, get_accel_from_plan, should_stop
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.custom.speed_limit.planner import retained_cap
+from openpilot.custom.personal_speed_zones.state import active_cap as personal_zone_cap
 from openpilot.common.swaglog import cloudlog
 
 A_CRUISE_MAX_VALS = [1.6, 1.2, 0.8, 0.6]
@@ -91,6 +92,9 @@ class LongitudinalPlanner:
       self.speed_limit_cap_mps = retained_cap(self.speed_limit_cap_mps, sm['speedLimitState'], True, True)
     if self.speed_limit_cap_mps is not None:
       v_cruise = min(v_cruise, self.speed_limit_cap_mps)
+    zone_cap = personal_zone_cap(sm['personalSpeedZoneState']) if sm.valid['personalSpeedZoneState'] else None
+    if zone_cap is not None:
+      v_cruise = min(v_cruise, zone_cap)
     if sm['controlsState'].forceDecel:
       v_cruise = 0.0
 

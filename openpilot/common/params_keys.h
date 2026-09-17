@@ -123,6 +123,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SpeedLimitAutoAcceptLower", {PERSISTENT, BOOL}},
     {"SpeedLimitAutoAcceptHigher", {PERSISTENT, BOOL}},
     {"SpeedLimitAbsoluteMaxMps", {PERSISTENT, FLOAT}},
+    {"PersonalSpeedZoneActiveState", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, JSON}},
     {"ShowDebugInfo", {PERSISTENT, BOOL}},
     {"RouteCount", {PERSISTENT, INT, "0"}},
     {"SnoozeUpdate", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
