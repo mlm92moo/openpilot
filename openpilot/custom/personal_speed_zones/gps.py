@@ -14,6 +14,7 @@ class ValidatedGPS:
   longitude: float
   bearing: float
   speed: float
+  horizontal_accuracy_known: bool
   received_at: float
   sequence: int
 
@@ -28,7 +29,10 @@ class GPSAdapter:
     self.latest: ValidatedGPS | None = None
 
   def observe(self, message, now: float) -> ValidatedGPS | None:
-    if message is None or message.which() != self.service or not message.valid:
+    if message is None or message.which() != self.service:
+      return None
+    if not message.valid:
+      self.latest = None
       return None
     sequence = int(message.logMonoTime)
     if sequence == self._sequence:
@@ -36,21 +40,39 @@ class GPSAdapter:
     self._sequence = sequence
     sample_time = sequence / 1e9
     if sample_time <= 0 or not -0.1 <= now - sample_time <= MAX_SAMPLE_AGE_S:
+      self.latest = None
       return None
     location = getattr(message, self.service)
     values = (location.latitude, location.longitude, location.bearingDeg, location.speed, location.horizontalAccuracy, location.bearingAccuracyDeg)
     if not location.hasFix or not all(math.isfinite(value) for value in values):
+      self.latest = None
       return None
     if not (-90 <= location.latitude <= 90 and -180 <= location.longitude <= 180):
+      self.latest = None
       return None
-    if location.horizontalAccuracy < 0 or location.horizontalAccuracy > MAX_HORIZONTAL_ACCURACY_M:
+    # qcomgpsd currently leaves horizontalAccuracy at its zero default. Treat
+    # that as unknown for the internal receiver; external GPS must report it.
+    horizontal_accuracy_known = location.horizontalAccuracy > 0
+    if (
+      location.horizontalAccuracy < 0
+      or location.horizontalAccuracy > MAX_HORIZONTAL_ACCURACY_M
+      or (not horizontal_accuracy_known and self.service != "gpsLocation")
+    ):
+      self.latest = None
       return None
     # A stationary receiver often reports an unknown heading. It is useful for
     # displaying position, but it must not be used to create or cross a gate.
     if location.bearingAccuracyDeg < 0 or location.bearingAccuracyDeg > MAX_BEARING_ACCURACY_DEG:
+      self.latest = None
       return None
     self.latest = ValidatedGPS(
-      float(location.latitude), float(location.longitude), float(location.bearingDeg) % 360.0, max(0.0, float(location.speed)), sample_time, sequence
+      float(location.latitude),
+      float(location.longitude),
+      float(location.bearingDeg) % 360.0,
+      max(0.0, float(location.speed)),
+      horizontal_accuracy_known,
+      sample_time,
+      sequence,
     )
     return self.latest
 

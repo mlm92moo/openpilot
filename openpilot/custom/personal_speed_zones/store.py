@@ -53,6 +53,8 @@ def _read(path=CONFIG_PATH):
     raise ValueError(f"saved zones cannot be read: {exc}") from exc
   if type(config) is not dict or type(config.get("zones")) is not list or type(config.get("apply_target", False)) is not bool:
     raise ValueError("saved zones have an invalid format")
+  if any(type(zone) is not dict or type(zone.get("id")) is not str or not zone["id"].strip() for zone in config["zones"]):
+    raise ValueError("each saved zone must be an object with an ID")
   config.setdefault("apply_target", False)
   return config
 
@@ -87,6 +89,25 @@ def revision(config):
 def snapshot(path=CONFIG_PATH):
   config = list_zones(path)
   return config, revision(config)
+
+
+def _raw_revision(path):
+  try:
+    with open(path, "rb") as config_file:
+      contents = config_file.read()
+  except OSError as exc:
+    raise ValueError(f"saved zones cannot be read: {exc}") from exc
+  return "invalid:" + hashlib.sha256(contents).hexdigest()
+
+
+def snapshot_for_portal(path=CONFIG_PATH):
+  """Keep the portal usable when the saved-zone file needs recovery."""
+  with _lock:
+    try:
+      config = _read(path)
+      return copy.deepcopy(config), revision(config), None
+    except ValueError as exc:
+      return _default_config(), _raw_revision(path), str(exc)
 
 
 def _check_revision(config, expected_revision):
@@ -180,7 +201,12 @@ def delete_zone(zone_id, path=CONFIG_PATH, expected_revision=None):
 
 def clear_zones(path=CONFIG_PATH, expected_revision=None):
   with _lock:
-    _check_revision(_read(path), expected_revision)
+    try:
+      current_revision = revision(_read(path))
+    except ValueError:
+      current_revision = _raw_revision(path)
+    if expected_revision is not None and current_revision != expected_revision:
+      raise ZoneConflict("Saved zones changed elsewhere. Refresh and try again.")
     _write(_default_config(), path)
 
 
@@ -200,17 +226,20 @@ class Recorder:
     return False
 
   def begin(self, position, target_mph, use_lowest_speed, speed_mps, now, config_revision):
-    self.start = validate_gate(position, "start")
-    self.target_mph = _finite(target_mph, "target speed", 12, 90)
+    start = validate_gate(position, "start")
+    target_mph = _finite(target_mph, "target speed", 12, 90)
     if type(use_lowest_speed) is not bool:
       raise ValueError("use_lowest_speed must be boolean")
+    lowest_speed_mps = _finite(speed_mps, "vehicle speed", 0, 100) if use_lowest_speed else None
+    self.start = start
+    self.target_mph = target_mph
     self.use_lowest_speed = use_lowest_speed
-    self.lowest_speed_mps = _finite(speed_mps, "vehicle speed", 0, 100) if use_lowest_speed else None
+    self.lowest_speed_mps = lowest_speed_mps
     self.started_at = now
     self.config_revision = config_revision
 
   def observe_speed(self, speed_mps):
-    if self.started_at is not None and self.use_lowest_speed and math.isfinite(speed_mps) and speed_mps >= 0:
+    if self.started_at is not None and self.use_lowest_speed and self.lowest_speed_mps is not None and math.isfinite(speed_mps) and speed_mps >= 0:
       self.lowest_speed_mps = min(self.lowest_speed_mps, speed_mps)
 
   def finish(self, position, path=CONFIG_PATH):

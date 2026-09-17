@@ -12,7 +12,7 @@ The `personal_speed_zonesd` process publishes `personalSpeedZoneState` independe
 
 Active-zone timestamps are kept in a short-lived Params value so an unexpected `personal_speed_zonesd` restart does not forget a cap in the middle of a curve. The value clears when the manager starts or the car transitions offroad, and every restored zone still obeys the ten-minute timeout.
 
-GPS comes from `gpsLocation` on comma 4 or `gpsLocationExternal` when an external receiver is configured. Samples require a valid fix, finite coordinates, horizontal accuracy of 50 meters or better, heading accuracy of 90 degrees or better, and an age no greater than 1.5 seconds. Losing GPS breaks gate-crossing continuity but does not suddenly release an already active cap.
+GPS comes from `gpsLocation` on comma 4 or `gpsLocationExternal` when an external receiver is configured. Samples require a valid fix, finite coordinates, heading accuracy of 90 degrees or better, and an age no greater than 1.5 seconds. External GPS samples also require reported horizontal accuracy of 50 meters or better. The current comma 4 `qcomgpsd` publisher does not populate horizontal accuracy, so its zero value is treated explicitly as unknown rather than as perfect accuracy. Losing GPS breaks gate-crossing continuity but does not suddenly release an already active cap.
 
 The portal has no login and listens on the comma's local network interface, matching the existing local portal policy. Anyone on that network who can reach port 8080 can view or change its settings and saved zones.
 

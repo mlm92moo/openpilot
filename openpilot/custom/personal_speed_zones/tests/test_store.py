@@ -49,6 +49,38 @@ def test_recorder_uses_lowest_speed_and_times_out(tmp_path):
   assert recorder.status(store.RECORDING_TIMEOUT_S)["recording"] is False
 
 
+def test_rejected_begin_does_not_partially_replace_recording_state():
+  recorder = store.Recorder()
+  recorder.begin(gate(), 25, False, None, 1.0, "revision")
+  with pytest.raises(ValueError):
+    recorder.begin(gate(37.001), 30, True, None, 2.0, "new-revision")
+  recorder.observe_speed(15.0)
+  assert recorder.start == gate()
+  assert recorder.target_mph == 25
+  assert recorder.use_lowest_speed is False
+  assert recorder.config_revision == "revision"
+
+
+def test_corrupt_configuration_can_be_cleared_through_portal_recovery(tmp_path):
+  path = tmp_path / "zones.json"
+  path.write_text("{broken")
+  config, revision, error = store.snapshot_for_portal(path)
+  assert config == {"apply_target": False, "zones": []}
+  assert revision.startswith("invalid:")
+  assert error is not None
+  store.clear_zones(path, revision)
+  assert store.list_zones(path) == {"apply_target": False, "zones": []}
+
+
+def test_invalid_zone_entry_uses_the_same_portal_recovery_path(tmp_path):
+  path = tmp_path / "zones.json"
+  path.write_text('{"apply_target": false, "zones": [null]}')
+  _, revision, error = store.snapshot_for_portal(path)
+  assert error == "each saved zone must be an object with an ID"
+  store.clear_zones(path, revision)
+  assert store.list_zones(path)["zones"] == []
+
+
 def test_zone_cap_is_independent_and_only_lowers_cruise():
   inactive = SimpleNamespace(restrictionActive=False, effectiveCapMps=0.0)
   active = SimpleNamespace(restrictionActive=True, effectiveCapMps=15.0)

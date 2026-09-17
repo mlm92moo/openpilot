@@ -68,7 +68,7 @@ SCRIPT = """const $=id=>document.getElementById(id),MPS_TO_MPH=2.236936,SIGNS=[2
 const mph=value=>value===null||value===undefined?'—':Math.round(value*MPS_TO_MPH*10)/10+' mph';
 function notice(message,kind=''){let el=$('notice');el.textContent=message;el.className='notice '+kind}
 function zoneNotice(message,kind=''){let el=$('zone-notice');el.textContent=message;el.className='notice '+kind}
-function renderZones(data){let config=data.config||{zones:[]},runtime=data.runtime||{},recorder=data.recorder||{};zoneRevision=data.revision||'';$('zone-gps').textContent=data.gps_ready?'Ready':'Unavailable';$('zone-state').textContent=recorder.recording?'Recording '+Math.round(recorder.target_mph)+' mph zone'+(recorder.use_lowest_speed?' using lowest speed.':'.'):(runtime.active?'Zone active: '+mph(runtime.effective_cap_mps):'Not recording. '+(config.zones||[]).length+' saved zone(s).');let list=$('zone-list');list.replaceChildren();(config.zones||[]).forEach(zone=>{let row=document.createElement('div');row.className='zone-row';let name=document.createElement('div');name.className='zone-name';name.textContent=zone.id;let edit=document.createElement('div');edit.className='zone-edit';let enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=!!zone.enabled;let target=document.createElement('input');target.type='number';target.min=12;target.max=90;target.value=zone.target_mph;let save=document.createElement('button');save.className='secondary';save.textContent='Save';save.onclick=()=>zoneAction({action:'update',zone_id:zone.id,enabled:enabled.checked,target_mph:Number(target.value),revision:zoneRevision});let remove=document.createElement('button');remove.className='danger';remove.textContent='Delete';remove.onclick=()=>{if(confirm('Delete '+zone.id+'?'))zoneAction({action:'delete',zone_id:zone.id,revision:zoneRevision})};edit.append(enabled,target,save,remove);row.append(name,edit);list.append(row)})}
+function renderZones(data){let config=data.config||{zones:[]},runtime=data.runtime||{},recorder=data.recorder||{};zoneRevision=data.revision||'';$('zone-gps').textContent=data.gps_ready?'Ready':'Unavailable';$('zone-state').textContent=data.config_error?'Saved zone file needs recovery.':recorder.recording?'Recording '+Math.round(recorder.target_mph)+' mph zone'+(recorder.use_lowest_speed?' using lowest speed.':'.'):(runtime.active?'Zone active: '+mph(runtime.effective_cap_mps):'Not recording. '+(config.zones||[]).length+' saved zone(s).');if(data.config_error)zoneNotice(data.config_error+' Use Erase all zones to recover.','error');let list=$('zone-list');list.replaceChildren();(config.zones||[]).forEach(zone=>{let row=document.createElement('div');row.className='zone-row';let name=document.createElement('div');name.className='zone-name';name.textContent=zone.id;let edit=document.createElement('div');edit.className='zone-edit';let enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=!!zone.enabled;let target=document.createElement('input');target.type='number';target.min=12;target.max=90;target.value=zone.target_mph;let save=document.createElement('button');save.className='secondary';save.textContent='Save';save.onclick=()=>zoneAction({action:'update',zone_id:zone.id,enabled:enabled.checked,target_mph:Number(target.value),revision:zoneRevision});let remove=document.createElement('button');remove.className='danger';remove.textContent='Delete';remove.onclick=()=>{if(confirm('Delete '+zone.id+'?'))zoneAction({action:'delete',zone_id:zone.id,revision:zoneRevision})};edit.append(enabled,target,save,remove);row.append(name,edit);list.append(row)})}
 function status(data){let settings=data.settings||{},rsa=data.rsa||{},zones=data.personal_speed_zones||{},device=data.device||{},connected=!!rsa.available||!!(zones.runtime||{}).available;loaded=true;revision=data.settings_revision||'';
   $('dot').className='dot '+(connected?'ok':'');$('connection').textContent=connected?'Connected':'Not connected';
   $('detected').textContent=mph(rsa.detected_limit_mps);$('accepted').textContent=mph(rsa.accepted_limit_mps);$('cap').textContent=mph(rsa.effective_cap_mps);
@@ -228,7 +228,7 @@ class Portal:
   def status(self):
     settings = read_settings(self.params)
     runtime = self.runtime_state.snapshot()
-    zone_config, zone_revision = zone_store.snapshot()
+    zone_config, zone_revision, zone_config_error = zone_store.snapshot_for_portal()
     return {
       "settings": settings,
       "settings_revision": settings_revision(settings),
@@ -239,6 +239,7 @@ class Portal:
         "runtime": runtime["zone"],
         "gps_ready": runtime["gps_ready"],
         "recorder": runtime["recorder"],
+        "config_error": zone_config_error,
       },
       "device": {
         "version": self.params.get("Version", return_default=True),

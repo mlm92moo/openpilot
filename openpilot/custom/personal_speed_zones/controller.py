@@ -172,9 +172,9 @@ class PersonalSpeedController:
     return GPSPosition(latitude, longitude, bearing % 360.0)
 
   @staticmethod
-  def _crossed_gate(previous: GPSPosition, current: GPSPosition, gate: Gate, zone: PersonalSpeedZone) -> bool:
+  def _gate_crossing_fraction(previous: GPSPosition, current: GPSPosition, gate: Gate, zone: PersonalSpeedZone) -> float | None:
     if angular_difference(current.bearing, gate.bearing) > zone.heading_tolerance_deg:
-      return False
+      return None
     previous_east, previous_north = local_coordinates(previous, gate)
     current_east, current_north = local_coordinates(current, gate)
     bearing_radians = math.radians(gate.bearing)
@@ -183,14 +183,14 @@ class PersonalSpeedController:
     previous_along = previous_east * direction_east + previous_north * direction_north
     current_along = current_east * direction_east + current_north * direction_north
     if not previous_along < 0 <= current_along:
-      return False
+      return None
     previous_cross = previous_east * right_east + previous_north * right_north
     current_cross = current_east * right_east + current_north * right_north
     if max(abs(previous_cross), abs(current_cross)) > zone.corridor_width_m / 2.0:
-      return False
+      return None
     crossing_fraction = -previous_along / (current_along - previous_along)
     crossing_cross = previous_cross + crossing_fraction * (current_cross - previous_cross)
-    return abs(crossing_cross) <= zone.gate_arm_distance_m
+    return crossing_fraction if abs(crossing_cross) <= zone.gate_arm_distance_m else None
 
   def _reload_if_changed(self) -> None:
     try:
@@ -288,15 +288,21 @@ class PersonalSpeedController:
         return
     if plausible_movement and self._previous_crossing_allowed:
       for zone in self.zones:
-        if zone.zone_id in self.active_zone_ids:
-          if self._crossed_gate(previous_position, current_position, zone.end, zone):
+        events = []
+        if zone.zone_id not in self.active_zone_ids:
+          if (fraction := self._gate_crossing_fraction(previous_position, current_position, zone.start, zone)) is not None:
+            events.append((fraction, "start"))
+        if (fraction := self._gate_crossing_fraction(previous_position, current_position, zone.end, zone)) is not None:
+          events.append((fraction, "end"))
+        for _, event in sorted(events):
+          if event == "start" and zone.zone_id not in self.active_zone_ids:
+            self.active_zone_ids.add(zone.zone_id)
+            self.active_zone_started_at[zone.zone_id] = now
+            log_event("personal_speed_zone_activated", zone_id=zone.zone_id, target_mps=zone.target, apply_target=zone.apply_target)
+          elif event == "end" and zone.zone_id in self.active_zone_ids:
             self.active_zone_ids.remove(zone.zone_id)
             self.active_zone_started_at.pop(zone.zone_id, None)
             log_event("personal_speed_zone_released", zone_id=zone.zone_id)
-        elif self._crossed_gate(previous_position, current_position, zone.start, zone):
-          self.active_zone_ids.add(zone.zone_id)
-          self.active_zone_started_at[zone.zone_id] = now
-          log_event("personal_speed_zone_activated", zone_id=zone.zone_id, target_mps=zone.target, apply_target=zone.apply_target)
     self._previous_crossing_allowed = previous_position is None or plausible_movement
     self._previous_position = current_position
     self._previous_time = now

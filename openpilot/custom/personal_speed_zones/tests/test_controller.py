@@ -57,6 +57,14 @@ def test_directional_crossing_activates_and_end_releases(tmp_path):
   assert instance.applied_target is None
 
 
+def test_one_sample_crossing_both_gates_does_not_leave_short_zone_active(tmp_path):
+  instance, _ = controller(tmp_path, [zone(end_north_m=15)])
+  update(instance, 0, position(-5))
+  update(instance, 1, position(25))
+  assert not instance.active_zone_ids
+  assert instance.applied_target is None
+
+
 def test_wrong_direction_and_parallel_road_do_not_activate(tmp_path):
   instance, _ = controller(tmp_path, [zone(corridor_width_m=10)])
   update(instance, 0, position(5, bearing=180))
