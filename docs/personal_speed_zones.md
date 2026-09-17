@@ -17,3 +17,7 @@ GPS comes from `gpsLocation` on comma 4 or `gpsLocationExternal` when an externa
 The portal has no login and listens on the comma's local network interface, matching the existing local portal policy. Anyone on that network who can reach port 8080 can view or change its settings and saved zones.
 
 The first road test should use one familiar route and a modest target reduction. Verify correct-direction activation, end-gate release, opposite-direction rejection, adjacent-road rejection, GPS-loss behavior, and interaction with Toyota RSA before recording additional zones.
+
+## Backlog
+
+- When the brake pedal is pressed while a Personal Speed Zone is active, immediately clear the active zone cap. Re-engaging openpilot before the saved exit gate must not restore that cleared cap. Saved zone definitions remain unchanged and should activate normally on the next trip through their entry gates.
