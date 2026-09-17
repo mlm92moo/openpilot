@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from openpilot.custom.speed_limit.portal_settings import SettingsConflict, apply_settings, read_settings, settings_revision
+from openpilot.custom.speed_limit.settings import SettingsConflict, apply_settings, read_settings, settings_revision
 
 
 class FakeParams:

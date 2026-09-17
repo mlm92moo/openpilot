@@ -19,7 +19,7 @@ def argument_parser():
     command.add_argument("--bus", type=int, default=2)
     command.add_argument("--persistence", type=float, default=.5, help="provisional diagnostic seconds")
     command.add_argument("--minimum-events", type=int, default=3)
-    command.add_argument("--maximum-gap", type=float, default=.5)
+    command.add_argument("--maximum-gap", type=float, default=1.5)
     command.add_argument("--stale", type=float, default=3)
     command.add_argument("--max-mib", type=int, default=64, help="stop at this bounded output size")
     command.add_argument("--quiet", action="store_true")
